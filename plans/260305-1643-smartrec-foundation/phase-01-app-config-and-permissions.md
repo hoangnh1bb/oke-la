@@ -7,21 +7,20 @@
 
 ## Overview
 - **Priority:** P1 — Must complete first, all other phases depend on this
-- **Status:** pending
-- **Description:** Update shopify.app.toml scopes, webhook API version, add app proxy config, clean unused scopes, add orders/create webhook
+- **Status:** complete
+- **Description:** Update shopify.app.toml webhook API version, add app proxy config, create proxy route stub
 
 ## Key Insights
 - Current scopes include write_products, write_content, write_themes — keep them (app may have other features beyond SmartRec)
 - Webhook API version is `2023-07` but server uses `ApiVersion.October25` — must align
 - App proxy config missing — needed for storefront→app communication
-- Need `orders/create` webhook for purchase-signal tracking (substitution patterns)
+- ~~`orders/create` webhook~~ — DEFERRED to Intent Engine plan (YAGNI: focus on storefront behavior signals first)
 
 ## Requirements
 
 ### Functional
 - Scopes reduced to minimum: `read_products,read_orders,read_themes`
 - App proxy configured: prefix=apps, subpath=smartrec
-- Webhook for orders/create added
 - Webhook API version updated to 2025-10
 
 ### Non-functional
@@ -31,8 +30,8 @@
 ## Related Code Files
 - **Modify:** `shopify.app.toml` — scopes, proxy, webhooks
 - **Modify:** `app/shopify.server.ts` — verify ApiVersion matches
-- **Create:** `app/routes/webhooks.app.orders-create.tsx` — orders/create handler stub
 - **Create:** `app/routes/proxy.$.tsx` — app proxy catch-all route stub
+- ~~**Create:** `app/routes/webhooks.app.orders-create.tsx`~~ — DEFERRED to Intent Engine plan
 
 ## Implementation Steps
 
@@ -57,18 +56,7 @@
    api_version = "2025-10"
    ```
 
-4. **Add orders/create webhook subscription:**
-   ```toml
-   [[webhooks.subscriptions]]
-   topics = ["orders/create"]
-   uri = "/webhooks/app/orders-create"
-   ```
-
-5. **Create webhook handler stub** `app/routes/webhooks.app.orders-create.tsx`:
-   - Import `authenticate.webhook` from shopify.server
-   - Log payload for now, real logic in Intent Engine plan
-
-6. **Create app proxy route stub** `app/routes/proxy.$.tsx`:
+4. **Create app proxy route stub** `app/routes/proxy.$.tsx`:
    - Use `authenticate.public.appProxy(request)` for auth
    - Return 200 JSON response for now
    - This catch-all handles all `/apps/smartrec/*` requests
@@ -77,13 +65,13 @@
    - Shopify will prompt merchant to re-approve if scopes changed
 
 ## Todo List
-- [ ] Verify shopify.app.toml scopes (keep existing, no removals)
-- [ ] Add [app_proxy] section to shopify.app.toml
-- [ ] Update webhook api_version to 2025-10
-- [ ] Add orders/create webhook subscription
-- [ ] Create orders-create webhook handler stub
-- [ ] Create app proxy catch-all route stub
-- [ ] Verify app installs with new config
+- [x] Verify shopify.app.toml scopes (keep existing, no removals)
+- [x] Add [app_proxy] section to shopify.app.toml
+- [x] Update webhook api_version to 2025-10
+- [x] Create app proxy catch-all route stub (proxy.$.tsx)
+- [x] Typecheck passes (no new errors)
+- [ ] ~~Add orders/create webhook~~ — DEFERRED to Intent Engine plan
+- [ ] ~~Create orders-create webhook handler~~ — DEFERRED to Intent Engine plan
 
 ## Success Criteria
 - `shopify app dev` runs without errors

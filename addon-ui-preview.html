@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartRec Add-ons UI Preview</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f4f6f8;
+            padding: 40px 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #202223;
+        }
+        .banner {
+            background: #E3F2FD;
+            border: 1px solid #90CAF9;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 32px;
+        }
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+            margin-bottom: 40px;
+        }
+        .addon-card {
+            background: white;
+            border: 1px solid #dfe3e8;
+            border-radius: 12px;
+            padding: 32px;
+            position: relative;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .addon-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+        }
+        .addon-card.active {
+            border: 2px solid #50C878;
+            background: #f4f6f8;
+        }
+        .badge {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 4px 16px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+        }
+        .badge.active { background: #50C878; }
+        .badge.selected { background: #5C6AC4; }
+        .icon {
+            font-size: 48px;
+            text-align: center;
+            margin-bottom: 12px;
+        }
+        .addon-title {
+            font-size: 24px;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        .price {
+            font-size: 36px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 20px;
+            color: #202223;
+        }
+        .price span {
+            font-size: 16px;
+            font-weight: normal;
+            color: #6d7175;
+        }
+        .features {
+            list-style: none;
+            margin-bottom: 24px;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+        .features li {
+            padding: 8px 0;
+            border-bottom: 1px solid #f4f6f8;
+        }
+        .features li:last-child { border: none; }
+        .use-case {
+            background: #f9fafb;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #6d7175;
+        }
+        .use-case ul {
+            margin-top: 8px;
+            padding-left: 20px;
+        }
+        .cta-button {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            transition: background 0.2s;
+            margin-bottom: 8px;
+        }
+        .cta-button.primary {
+            background: #5C6AC4;
+            color: white;
+        }
+        .cta-button.primary:hover { background: #4A5A9C; }
+        .cta-button.secondary {
+            background: #f4f6f8;
+            color: #6d7175;
+        }
+        .bundle-banner {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 32px;
+            text-align: center;
+        }
+        .comparison-table {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 32px;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #f4f6f8;
+        }
+        th {
+            background: #f9fafb;
+            font-weight: 600;
+            border-bottom: 2px solid #dfe3e8;
+        }
+        .check { color: #50C878; font-size: 18px; }
+        .dash { color: #dfe3e8; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎁 Chọn Add-ons</h1>
+
+        <!-- Info Banner -->
+        <div class="banner">
+            <strong>📦 Add-ons nâng cao tính năng của gói Growth</strong>
+            <br>
+            Chọn add-on phù hợp với nhu cầu của bạn. Có thể mua riêng lẻ hoặc cả hai.
+        </div>
+
+        <!-- Add-ons Pricing Cards -->
+        <div class="pricing-grid">
+            <!-- Giao Diện Pro -->
+            <div class="addon-card">
+                <div class="icon">🎨</div>
+                <div class="addon-title">Giao Diện Pro</div>
+                <div class="price">$5<span>/tháng</span></div>
+                
+                <ul class="features">
+                    <li>✅ Màu riêng cho từng widget</li>
+                    <li>✅ Style nút (solid/outline)</li>
+                    <li>✅ Text tùy chỉnh chi tiết</li>
+                    <li>✅ Live preview trong admin</li>
+                </ul>
+
+                <div class="use-case">
+                    <strong>Phù hợp cho:</strong>
+                    <ul>
+                        <li>Shops cần branding nhất quán</li>
+                        <li>Tùy chỉnh giao diện theo theme</li>
+                        <li>A/B testing màu & text</li>
+                    </ul>
+                </div>
+
+                <a href="#" class="cta-button primary">Mua ngay $5/tháng</a>
+            </div>
+
+            <!-- Thống Kê Pro -->
+            <div class="addon-card">
+                <div class="icon">📊</div>
+                <div class="addon-title">Thống Kê Pro</div>
+                <div class="price">$7<span>/tháng</span></div>
+                
+                <ul class="features">
+                    <li>✅ Phân tích doanh thu chi tiết</li>
+                    <li>✅ Biểu đồ xu hướng 7 ngày</li>
+                    <li>✅ Top sản phẩm theo tương tác</li>
+                    <li>✅ Theo dõi đơn hàng (24h window)</li>
+                </ul>
+
+                <div class="use-case">
+                    <strong>Phù hợp cho:</strong>
+                    <ul>
+                        <li>Shops cần đo ROI của app</li>
+                        <li>Tối ưu product placement</li>
+                        <li>Data-driven decisions</li>
+                    </ul>
+                </div>
+
+                <a href="#" class="cta-button primary">Mua ngay $7/tháng</a>
+            </div>
+        </div>
+
+        <!-- Bundle Banner -->
+        <div class="bundle-banner">
+            <h3 style="font-size: 20px; margin-bottom: 12px; font-weight: 600;">
+                💎 Bundle Deal
+            </h3>
+            <p style="font-size: 16px; margin-bottom: 16px; opacity: 0.9;">
+                Mua cả 2 add-ons chỉ với <strong>$12/tháng</strong> thay vì $5 + $7
+            </p>
+            <p style="font-size: 32px; font-weight: bold; margin-bottom: 8px;">
+                $12<span style="font-size: 18px; font-weight: normal;">/tháng</span>
+            </p>
+            <p style="font-size: 14px; opacity: 0.8; margin-bottom: 20px;">
+                Tiết kiệm $0/tháng (chương trình khuyến mãi sắp tới)
+            </p>
+            <p style="font-size: 13px; opacity: 0.9; font-style: italic;">
+                * Hiện tại chưa có bundle discount. Mua riêng lẻ: $5 + $7 = $12/tháng
+            </p>
+        </div>
+
+        <!-- Comparison Table -->
+        <div class="comparison-table">
+            <h2 style="margin-bottom: 20px;">So sánh Add-ons</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tính năng</th>
+                        <th style="text-align: center;">🎨 Giao Diện Pro</th>
+                        <th style="text-align: center;">📊 Thống Kê Pro</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Màu tùy chỉnh per-widget</td>
+                        <td style="text-align: center;"><span class="check">✓</span></td>
+                        <td style="text-align: center;"><span class="dash">—</span></td>
+                    </tr>
+                    <tr>
+                        <td>Style nút (solid/outline)</td>
+                        <td style="text-align: center;"><span class="check">✓</span></td>
+                        <td style="text-align: center;"><span class="dash">—</span></td>
+                    </tr>
+                    <tr>
+                        <td>Text tùy chỉnh</td>
+                        <td style="text-align: center;"><span class="check">✓</span></td>
+                        <td style="text-align: center;"><span class="dash">—</span></td>
+                    </tr>
+                    <tr>
+                        <td>Live preview</td>
+                        <td style="text-align: center;"><span class="check">✓</span></td>
+                        <td style="text-align: center;"><span class="dash">—</span></td>
+                    </tr>
+                    <tr>
+                        <td>Revenue attribution</td>
+                        <td style="text-align: center;"><span class="dash">—</span></td>
+                        <td style="text-align: center;"><span class="check">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td>Top products chart</td>
+                        <td style="text-align: center;"><span class="dash">—</span></td>
+                        <td style="text-align: center;"><span class="check">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td>7-day trend analysis</td>
+                        <td style="text-align: center;"><span class="dash">—</span></td>
+                        <td style="text-align: center;"><span class="check">✓</span></td>
+                    </tr>
+                    <tr style="background: #f9fafb; font-weight: 600;">
+                        <td>Giá/tháng</td>
+                        <td style="text-align: center; color: #5C6AC4;">$5</td>
+                        <td style="text-align: center; color: #5C6AC4;">$7</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- FAQ -->
+        <div style="background: white; border-radius: 8px; padding: 24px; margin-bottom: 32px;">
+            <h2 style="margin-bottom: 20px;">❓ Câu hỏi thường gặp</h2>
+            <div style="font-size: 14px; line-height: 1.8;">
+                <p><strong>Q: Có thể mua 1 add-on rồi mua thêm add-on kia sau không?</strong></p>
+                <p style="color: #6d7175; margin-bottom: 16px;">
+                    A: Có, add-ons độc lập với nhau. Mua lúc nào cũng được.
+                </p>
+
+                <p><strong>Q: Có thể hủy add-on mà giữ gói Growth không?</strong></p>
+                <p style="color: #6d7175; margin-bottom: 16px;">
+                    A: Có, add-ons riêng biệt với Growth. Hủy add-on không ảnh hưởng gói chính.
+                </p>
+
+                <p><strong>Q: Add-on có thời gian dùng thử không?</strong></p>
+                <p style="color: #6d7175; margin-bottom: 16px;">
+                    A: Không, add-ons không có trial. Nhưng có thể hủy bất cứ lúc nào.
+                </p>
+
+                <p><strong>Q: Bundle deal khi nào có?</strong></p>
+                <p style="color: #6d7175;">
+                    A: Chương trình khuyến mãi bundle sẽ có trong tương lai. Theo dõi email để cập nhật.
+                </p>
+            </div>
+        </div>
+
+        <div style="text-align: center; padding: 20px; background: white; border-radius: 8px;">
+            <p style="color: #6d7175; font-size: 14px;">
+                ✅ <strong>Add-ons UI Redesign Complete</strong> — 525 lines, table layout
+            </p>
+            <p style="color: #6d7175; font-size: 13px; margin-top: 8px;">
+                Preview: <code>/app/billing/addon</code>
+            </p>
+        </div>
+    </div>
+</body>
+</html>
