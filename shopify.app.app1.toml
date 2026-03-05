@@ -1,0 +1,16 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "6973d6517f3918e1bb036af97fccfe2e"
+name = "app1"
+application_url = "https://shopify.github.io/shopify-cli/help/start-app/"
+embedded = true
+handle = "app1-1022"
+
+[webhooks]
+api_version = "2022-07"
+
+[auth]
+redirect_urls = [ "http://localhost:3456/" ]
+
+[pos]
+embedded = false

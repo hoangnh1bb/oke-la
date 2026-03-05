@@ -1,0 +1,48 @@
+<script>
+  window.SmartRecMeta = {
+    shopDomain: {{ shop.permanent_domain | json }},
+    appProxy: {{ shop.permanent_domain | prepend: "https://" | append: "/apps/smartrec" | json }},
+    pageType: {{ request.page_type | json }},
+    productId: {{ product.id | default: "null" }},
+    productHandle: {{ product.handle | default: "" | json }},
+    productType: {{ product.type | default: "" | json }},
+    productTags: {{ product.tags | json }},
+    productPrice: {{ product.price | default: 0 }},
+    collectionHandle: {{ collection.handle | default: "" | json }},
+    cartToken: {{ cart.token | default: "" | json }},
+    cartItemCount: {{ cart.item_count | default: 0 }},
+    customerId: {{ customer.id | default: "null" }},
+    templateName: {{ template.name | default: "" | json }},
+    enableTracking: {{ block.settings.enable_tracking | json }},
+    enableWidgets: {{ block.settings.enable_widgets | json }}
+  };
+</script>
+
+{% if block.settings.enable_tracking %}
+  {{ 'smartrec-signal-collector.js' | asset_url | script_tag }}
+{% endif %}
+
+{% if block.settings.enable_widgets %}
+  {{ 'smartrec-widget-renderer.js' | asset_url | script_tag }}
+{% endif %}
+
+{% schema %}
+{
+  "name": "SmartRec Tracker",
+  "target": "body",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "enable_tracking",
+      "label": "Enable behavior tracking",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_widgets",
+      "label": "Enable recommendation widgets",
+      "default": true
+    }
+  ]
+}
+{% endschema %}
