@@ -25,6 +25,7 @@ export interface ViewedProduct {
   title: string;
   price: string;
   image: string;
+  url: string;
   timestamp: number;
 }
 
@@ -36,6 +37,7 @@ export interface CurrentProduct {
   title: string;
   price: string;
   image: string;
+  url: string;
 }
 
 // Payload sent from signal-collector.js to POST /api/intent
@@ -53,7 +55,7 @@ export interface SignalPayload {
 
 // Action returned to widget-renderer.js
 export interface IntentAction {
-  type: "none" | "alternative_nudge" | "comparison_bar" | "tag_navigator" | "trust_nudge";
+  type: "none" | "alternative_nudge" | "comparison_bar" | "tag_navigator";
   data?: Record<string, unknown>;
 }
 
@@ -75,8 +77,6 @@ export interface UseCaseSettings {
   ucCompareEnabled: boolean;
   ucLostEnabled: boolean;
   ucLostBackNavMin: number;
-  ucCartEnabled: boolean;
-  ucCartHesitationSec: number;
   maxAlternatives: number;
 }
 

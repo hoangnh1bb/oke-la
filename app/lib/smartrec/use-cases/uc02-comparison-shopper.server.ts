@@ -34,12 +34,14 @@ export const uc02ComparisonShopperHandler: UseCaseHandler = {
           title: previousSameType.title,
           price: previousSameType.price,
           image: previousSameType.image,
+          url: previousSameType.url || "",
         },
         productB: {
           id: payload.currentProduct.id,
           title: payload.currentProduct.title,
           price: payload.currentProduct.price,
           image: payload.currentProduct.image,
+          url: payload.currentProduct.url || "",
         },
       },
     };

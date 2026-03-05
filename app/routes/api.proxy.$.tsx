@@ -36,9 +36,9 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   try {
     switch (subPath) {
-      case "api/config":
+      case "config":
         return handleGetConfig(shop);
-      case "api/alternatives":
+      case "alternatives":
         return handleGetAlternatives(url, shop);
       default:
         return json({ error: "Not found" }, 404);
@@ -61,9 +61,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
   try {
     const body = await request.json();
     switch (subPath) {
-      case "api/intent":
+      case "intent":
         return handlePostIntent(body as SignalPayload);
-      case "api/track":
+      case "track":
         return handlePostTrack(body as TrackPayload);
       default:
         return json({ error: "Not found" }, 404);
@@ -87,9 +87,8 @@ async function handleGetConfig(shop: string) {
     enabled: settings.enabled,
     ucHesitationMin: settings.ucHesitationMin,
     ucHesitationMax: settings.ucHesitationMax,
-    ucCompareEnabled: settings.ucCompareEnabled,
+    ucCompareEnabled: settings.comparisonBar,
     ucLostBackNavMin: settings.ucLostBackNavMin,
-    ucCartHesitationSec: settings.ucCartHesitationSec,
     maxAlternatives: settings.maxAlternatives,
   });
 }
@@ -115,7 +114,7 @@ async function handleGetAlternatives(url: URL, shop: string) {
 }
 
 async function handlePostTrack(body: TrackPayload) {
-  await prisma.analyticsEvent.create({
+  await prisma.smartRecEvent.create({
     data: {
       shop: body.shop,
       sessionId: body.sessionId,
