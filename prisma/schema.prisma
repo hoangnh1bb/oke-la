@@ -32,3 +32,52 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+model SmartRecSettings {
+  id                    String   @id @default(cuid())
+  shop                  String   @unique
+  enabled               Boolean  @default(true)
+  alternativeNudge      Boolean  @default(true)
+  comparisonBar         Boolean  @default(true)
+  tagNavigator          Boolean  @default(true)
+  trustNudge            Boolean  @default(true)
+  thresholdBrowsing     Int      @default(30)
+  thresholdConsidering  Int      @default(55)
+  thresholdHighIntent   Int      @default(75)
+  thresholdStrongIntent Int      @default(89)
+  thresholdReadyToBuy   Int      @default(90)
+  ucHesitationMin       Int      @default(56)
+  ucHesitationMax       Int      @default(89)
+  ucLostBackNavMin      Int      @default(3)
+  ucCartHesitationSec   Int      @default(60)
+  maxAlternatives       Int      @default(2)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model SubstitutionCache {
+  id              Int      @id @default(autoincrement())
+  shop            String
+  sourceProductId String
+  targetProductId String
+  frequency       Int      @default(1)
+  updatedAt       DateTime @updatedAt
+
+  @@unique([shop, sourceProductId, targetProductId])
+  @@index([shop, sourceProductId])
+}
+
+model SmartRecEvent {
+  id        String   @id @default(cuid())
+  shop      String
+  eventType String
+  widgetType String?
+  productId  String?
+  sessionId  String?
+  intentScore Int?
+  metadata   String?
+  createdAt  DateTime @default(now())
+
+  @@index([shop, createdAt])
+  @@index([shop, widgetType])
+}
