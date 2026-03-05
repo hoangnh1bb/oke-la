@@ -1,0 +1,59 @@
+.sr-quota-banner {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 16px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 999999;
+  max-width: 320px;
+  animation: slideIn 0.3s ease-out;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.sr-quota-banner.sr-warning {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.sr-banner-content {
+  position: relative;
+  padding-right: 30px;
+}
+
+.sr-banner-content a {
+  color: #fff;
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.sr-close {
+  position: absolute;
+  top: -4px;
+  right: -10px;
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  line-height: 20px;
+}
+
+.sr-close:hover {
+  opacity: 0.8;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
