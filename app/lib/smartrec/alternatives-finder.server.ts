@@ -17,6 +17,8 @@ export interface AlternativeProduct {
   title: string;
   price: string;
   image: string;
+  url: string;
+  variant_id: string;
   matchReason: "substitution" | "shopify_ml" | "similar_products" | "session_fallback";
 }
 
@@ -112,6 +114,8 @@ export async function findAlternativeProducts(
       title: p.title,
       price: p.price,
       image: p.image,
+      url: "",
+      variant_id: "",
       matchReason: "session_fallback",
     }));
 
@@ -122,12 +126,19 @@ export async function findAlternativeProducts(
   return final;
 }
 
+function extractNumericId(gid: string): string {
+  const match = gid.match(/\/(\d+)$/);
+  return match ? match[1] : gid;
+}
+
 function toAlternative(p: ShopifyProduct, reason: AlternativeProduct["matchReason"]): AlternativeProduct {
   return {
     id: p.id,
     title: p.title,
     price: p.price,
     image: p.image,
+    url: p.handle ? `/products/${p.handle}` : "",
+    variant_id: p.variantId ? extractNumericId(p.variantId) : "",
     matchReason: reason,
   };
 }

@@ -60,7 +60,7 @@ Build the foundational layer for SmartRec, an intent-based product discovery Sho
 
 | # | Phase | Status | Effort | File |
 |---|---|---|---|---|
-| 01 | App Config & Permissions | pending | 1h | [phase-01](./phase-01-app-config-and-permissions.md) |
+| 01 | App Config & Permissions | **complete** | 0.5h | [phase-01](./phase-01-app-config-and-permissions.md) |
 | 02 | Theme App Extension Scaffold | pending | 1.5h | [phase-02](./phase-02-theme-app-extension-scaffold.md) |
 | 03 | App Proxy & API Routes | pending | 1.5h | [phase-03](./phase-03-app-proxy-and-api-route-stubs.md) |
 | 04 | Database Schema | pending | 1h | [phase-04](./phase-04-database-schema-and-prisma-models.md) |

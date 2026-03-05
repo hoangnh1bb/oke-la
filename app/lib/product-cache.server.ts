@@ -51,10 +51,5 @@ export interface CachedProduct {
   review_count: number;
 }
 
-export interface ShopPolicies {
-  hasFreeReturn: boolean;
-}
-
 export const productCache = new MemoryCache<CachedProduct>();
 export const productListCache = new MemoryCache<CachedProduct[]>();
-export const shopPolicyCache = new MemoryCache<ShopPolicies>();

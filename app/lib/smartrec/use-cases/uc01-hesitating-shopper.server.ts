@@ -17,8 +17,9 @@ export const uc01HesitatingShopperHandler: UseCaseHandler = {
   async evaluate(payload: SignalPayload, settings: UseCaseSettings): Promise<IntentAction | null> {
     if (payload.pageType !== "product") return null;
     if (payload.score < settings.ucHesitationMin || payload.score > settings.ucHesitationMax) return null;
-    if (!payload.signals.sizeChartOpen && !payload.signals.reviewHover) return null;
     if (!payload.currentProduct) return null;
+    // sizeChartOpen/reviewHover boost score but are not required —
+    // many stores lack detectable review/size chart elements
 
     const alts = await findAlternativeProducts(
       payload.shop,

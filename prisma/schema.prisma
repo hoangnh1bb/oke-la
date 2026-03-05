@@ -33,6 +33,64 @@ model Session {
   refreshTokenExpires DateTime?
 }
 
+// Pricing System Models
+model UsageLog {
+  id         Int      @id @default(autoincrement())
+  shopId     String
+  widgetType String
+  productId  String?
+  eventType  String
+  srSource   Boolean  @default(false)
+  timestamp  DateTime @default(now())
+
+  @@index([shopId, timestamp])
+}
+
+model Subscription {
+  id                 Int       @id @default(autoincrement())
+  shopId             String    @unique
+  plan               String    @default("free")
+  status             String    @default("active")
+  trialEndsAt        DateTime?
+  billingCycleAnchor DateTime?
+  shopifyChargeId    String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model AddonSubscription {
+  id              Int      @id @default(autoincrement())
+  shopId          String
+  addonType       String
+  status          String   @default("active")
+  shopifyChargeId String?
+  createdAt       DateTime @default(now())
+
+  @@index([shopId, addonType])
+}
+
+model ShopConfig {
+  shopId        String   @id
+  primaryColor  String   @default("#4A90E2")
+  headlineText  String   @default("Bạn có thể thích")
+  widgetColors  String?  // JSON
+  widgetTexts   String?  // JSON
+  buttonStyle   String   @default("solid")
+  updatedAt     DateTime @updatedAt
+}
+
+model OrderAttribution {
+  id         Int      @id @default(autoincrement())
+  shopId     String
+  orderId    String   @unique
+  productIds String   // JSON array
+  orderTotal Float
+  createdAt  DateTime @default(now())
+
+  @@index([shopId, createdAt])
+}
+
+// SmartRec — Merchant settings per store (pluggable thresholds)
 model SmartRecSettings {
   id                    String   @id @default(cuid())
   shop                  String   @unique
@@ -40,7 +98,6 @@ model SmartRecSettings {
   alternativeNudge      Boolean  @default(true)
   comparisonBar         Boolean  @default(true)
   tagNavigator          Boolean  @default(true)
-  trustNudge            Boolean  @default(true)
   thresholdBrowsing     Int      @default(30)
   thresholdConsidering  Int      @default(55)
   thresholdHighIntent   Int      @default(75)
@@ -49,7 +106,6 @@ model SmartRecSettings {
   ucHesitationMin       Int      @default(56)
   ucHesitationMax       Int      @default(89)
   ucLostBackNavMin      Int      @default(3)
-  ucCartHesitationSec   Int      @default(60)
   maxAlternatives       Int      @default(2)
   // Widget style customization
   styleAccentColor      String   @default("#000000")

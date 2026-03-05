@@ -1,0 +1,59 @@
+// Pricing System Models
+// Add these to your existing schema.prisma file
+
+model UsageLog {
+  id         Int      @id @default(autoincrement())
+  shopId     String
+  widgetType String
+  productId  String?
+  eventType  String
+  srSource   Boolean  @default(false)
+  timestamp  DateTime @default(now())
+
+  @@index([shopId, timestamp])
+}
+
+model Subscription {
+  id             Int       @id @default(autoincrement())
+  shopId         String    @unique
+  plan           String    // 'free' | 'growth'
+  status         String    // 'active' | 'trial' | 'cancelled'
+  trialEndsAt    DateTime?
+  billingCycleAnchor DateTime?
+  shopifyChargeId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model AddonSubscription {
+  id              Int      @id @default(autoincrement())
+  shopId          String
+  addonType       String   // 'appearance_pro' | 'analytics_pro'
+  status          String   // 'active' | 'cancelled'
+  shopifyChargeId String?
+  createdAt       DateTime @default(now())
+
+  @@index([shopId, addonType])
+}
+
+model ShopConfig {
+  shopId       String   @id
+  primaryColor String?  @default("#4A90E2")
+  widgetColors String?  // JSON string
+  buttonStyle  String?  @default("solid")
+  updatedAt    DateTime @updatedAt
+}
+
+model OrderAttribution {
+  id                 Int      @id @default(autoincrement())
+  shopId             String
+  orderId            String
+  orderNumber        String
+  attributedRevenue  Float
+  totalOrderValue    Float
+  attributedProducts String   // Comma-separated product IDs
+  orderDate          DateTime
+  createdAt          DateTime @default(now())
+
+  @@index([shopId, orderDate])
+}
