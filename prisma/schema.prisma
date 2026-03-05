@@ -51,6 +51,16 @@ model SmartRecSettings {
   ucLostBackNavMin      Int      @default(3)
   ucCartHesitationSec   Int      @default(60)
   maxAlternatives       Int      @default(2)
+  // Widget style customization
+  styleAccentColor      String   @default("#000000")
+  styleTextColor        String   @default("#1a1a1a")
+  styleBgColor          String   @default("#ffffff")
+  styleBorderRadius     Int      @default(8)
+  styleFontSize         Int      @default(14)
+  styleButtonStyle      String   @default("filled")
+  stylePosition         String   @default("default")
+  styleCustomCSS        String   @default("")
+  widgetTitle           String   @default("Không chắc chắn? Khách hàng tương tự cũng xem những sản phẩm này.")
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }
@@ -75,9 +85,11 @@ model SmartRecEvent {
   productId  String?
   sessionId  String?
   intentScore Int?
+  value      Float    @default(0)
   metadata   String?
   createdAt  DateTime @default(now())
 
   @@index([shop, createdAt])
+  @@index([shop, eventType, createdAt])
   @@index([shop, widgetType])
 }

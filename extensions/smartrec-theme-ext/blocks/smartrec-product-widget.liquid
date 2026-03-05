@@ -116,7 +116,7 @@
 
   {%- if count > 0 -%}
     {%- comment -%} Trigger button {%- endcomment -%}
-    <div class="sr-ph sr-ph-trigger" onclick="var o=document.getElementById('sr-ph-overlay');o.style.display='flex';setTimeout(function(){o.classList.add('open')},10)">
+    <div class="sr-ph sr-ph-trigger" onclick="var o=document.getElementById('sr-ph-overlay');o.style.display='flex';setTimeout(function(){o.classList.add('open')},10);if(typeof srTrackEvent==='function')srTrackEvent('impression','alternative_nudge',null,0)">
       <div class="sr-ph-thumbs">
         {%- if rec1 and rec1.featured_image -%}
           <img class="sr-ph-thumb" src="{{ rec1.featured_image | image_url: width: 80 }}" alt="" width="40" height="40" loading="lazy">
@@ -175,100 +175,133 @@
         o.classList.remove('open');
         setTimeout(function() { o.style.display = 'none'; }, 300);
       }
+
+      function srIsThemeEditor() {
+        return window.Shopify && window.Shopify.designMode;
+      }
+
+      function srTrackEvent(eventType, widgetType, productId, value) {
+        var proxy = window.SmartRecMeta && window.SmartRecMeta.appProxy;
+        if (!proxy) return;
+        fetch(proxy + '/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventType: eventType, widgetType: widgetType, productId: productId ? String(productId) : null, value: value || 0 })
+        }).catch(function() {});
+      }
+
       function srAddToCart(variantId, btn) {
         if (!variantId) { btn.textContent = 'Không có variant'; return; }
+
+        if (srIsThemeEditor()) {
+          btn.textContent = '✓ Đã thêm (preview)';
+          btn.classList.add('sr-ph-atc-ok');
+          setTimeout(function() {
+            btn.textContent = 'Thêm vào giỏ';
+            btn.classList.remove('sr-ph-atc-ok');
+          }, 1500);
+          return;
+        }
+
+        var origText = btn.textContent;
         btn.textContent = 'Đang thêm...';
         btn.disabled = true;
 
-        fetch('/cart/add.js', {
+        var formData = new FormData();
+        formData.append('id', variantId);
+        formData.append('quantity', '1');
+
+        fetch(window.Shopify.routes.root + 'cart/add.js', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({
-            items: [{ id: variantId, quantity: 1 }],
-            sections: srGetCartSections()
-          })
+          body: formData
         })
-        .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
-        .then(function(result) {
-          if (result.ok) {
-            btn.textContent = '✓ Đã thêm';
-            btn.classList.add('sr-ph-atc-ok');
+        .then(function(res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.json();
+        })
+        .then(function(item) {
+          btn.textContent = '✓ Đã thêm';
+          btn.classList.add('sr-ph-atc-ok');
 
-            srUpdateCartUI(result.data);
-            srClosePopup();
+          srRefreshCart();
+          srClosePopup();
 
-            setTimeout(function() {
-              btn.textContent = 'Thêm vào giỏ';
-              btn.classList.remove('sr-ph-atc-ok');
-              btn.disabled = false;
-            }, 2000);
-          } else {
-            btn.textContent = result.data.description || 'Lỗi — thử lại';
+          try {
+            var atcValue = item && item.price ? item.price : 0;
+            srTrackEvent('widget_atc', 'alternative_nudge', item.product_id, atcValue);
+          } catch(e) {}
+
+          setTimeout(function() {
+            btn.textContent = origText;
+            btn.classList.remove('sr-ph-atc-ok');
             btn.disabled = false;
-          }
+          }, 2500);
         })
-        .catch(function() {
+        .catch(function(err) {
+          console.error('[SmartRec] ATC error:', err);
           btn.textContent = 'Lỗi — thử lại';
           btn.disabled = false;
+          setTimeout(function() { btn.textContent = origText; btn.disabled = false; }, 3000);
         });
       }
 
-      function srGetCartSections() {
-        var sections = [];
-        if (document.querySelector('cart-notification')) sections.push('cart-notification-product', 'cart-notification-button', 'cart-icon-bubble');
-        if (document.querySelector('cart-drawer')) sections.push('cart-drawer', 'cart-icon-bubble');
-        if (sections.length === 0) sections.push('cart-icon-bubble');
-        return sections.join(',');
-      }
+      function srRefreshCart() {
+        fetch(window.Shopify.routes.root + 'cart.js', {
+          headers: { 'Accept': 'application/json' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(cart) {
+          var countEls = document.querySelectorAll(
+            '.cart-count-bubble span, [data-cart-count], .cart-count, .js-cart-count, #cart-icon-bubble span'
+          );
+          countEls.forEach(function(el) { el.textContent = cart.item_count; });
 
-      function srUpdateCartUI(data) {
-        var sections = data.sections || {};
-
-        Object.keys(sections).forEach(function(sectionId) {
-          var html = sections[sectionId];
-          if (!html) return;
-          var tmp = document.createElement('div');
-          tmp.innerHTML = html;
-
-          var sectionEl = document.getElementById('shopify-section-' + sectionId);
-          if (sectionEl) {
-            sectionEl.innerHTML = tmp.querySelector('.shopify-section')
-              ? tmp.querySelector('.shopify-section').innerHTML
-              : html;
-          }
-        });
-
-        var bubble = document.querySelector('cart-icon-bubble, .cart-count-bubble, [data-cart-count]');
-        if (bubble) {
-          fetch('/cart.js').then(function(r) { return r.json(); }).then(function(cart) {
-            var countEls = document.querySelectorAll('.cart-count-bubble span, [data-cart-count]');
-            countEls.forEach(function(el) { el.textContent = cart.item_count; });
-            if (bubble.closest('.header__icon')) bubble.closest('.header__icon').setAttribute('aria-label', cart.item_count + ' items');
+          var bubbles = document.querySelectorAll('.cart-count-bubble');
+          bubbles.forEach(function(b) {
+            if (cart.item_count > 0) b.removeAttribute('hidden');
           });
-        }
 
-        var cartNotification = document.querySelector('cart-notification');
-        if (cartNotification && typeof cartNotification.renderContents === 'function') {
-          cartNotification.renderContents(data);
-        } else if (cartNotification) {
-          cartNotification.classList.add('animate', 'active');
-          cartNotification.removeAttribute('hidden');
-          var focusEl = cartNotification.querySelector('[role="status"]');
-          if (focusEl) focusEl.setAttribute('aria-live', 'polite');
-        }
+          document.documentElement.dispatchEvent(
+            new CustomEvent('cart:refresh', { bubbles: true, detail: { cart: cart } })
+          );
+        })
+        .catch(function() {});
 
-        var cartDrawer = document.querySelector('cart-drawer');
-        if (cartDrawer) {
-          if (typeof cartDrawer.renderContents === 'function') {
-            cartDrawer.renderContents(data);
+        var notification = document.querySelector('cart-notification');
+        if (notification) {
+          if (typeof notification.open === 'function') {
+            notification.open();
           } else {
-            cartDrawer.classList.add('active');
-            var details = cartDrawer.querySelector('details');
+            notification.classList.add('animate', 'active');
+            notification.removeAttribute('hidden');
+          }
+        }
+
+        var drawer = document.querySelector('cart-drawer');
+        if (drawer) {
+          if (typeof drawer.open === 'function') {
+            drawer.open();
+          } else {
+            drawer.classList.add('active', 'is-open');
+            var details = drawer.querySelector('details');
             if (details) details.setAttribute('open', '');
           }
         }
 
-        document.dispatchEvent(new CustomEvent('cart:updated'));
+        fetch(window.Shopify.routes.root + '?sections=cart-notification-product,cart-notification-button,cart-icon-bubble,cart-drawer')
+        .then(function(r) { return r.json(); })
+        .then(function(sections) {
+          Object.keys(sections).forEach(function(id) {
+            var el = document.getElementById('shopify-section-' + id);
+            if (el && sections[id]) {
+              var tmp = document.createElement('div');
+              tmp.innerHTML = sections[id];
+              var inner = tmp.querySelector('.shopify-section');
+              el.innerHTML = inner ? inner.innerHTML : sections[id];
+            }
+          });
+        })
+        .catch(function() {});
       }
     </script>
   {%- else -%}

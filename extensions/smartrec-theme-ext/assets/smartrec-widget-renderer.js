@@ -96,6 +96,24 @@
     return stars;
   }
 
+  // ── Event Tracking ─────────────────────────────────────────────
+
+  function trackEvent(eventType, widgetType, productId, value) {
+    var proxyBase = window.SmartRecMeta && window.SmartRecMeta.appProxy;
+    if (!proxyBase) return;
+    var payload = { eventType: eventType };
+    if (widgetType) payload.widgetType = widgetType;
+    if (productId) payload.productId = String(productId);
+    if (value) payload.value = value;
+    try {
+      fetch(proxyBase + '/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(function() {});
+    } catch (e) { /* silent */ }
+  }
+
   // ── DOM Anchor Finders ──────────────────────────────────────────
 
   function findBlockAnchor(id) {
@@ -152,114 +170,254 @@
     return null;
   }
 
-  // ── Shared CSS ──────────────────────────────────────────────────
+  // ── Shared CSS (with custom style overrides) ───────────────────
 
-  var BASE_CSS = [
-    '.sr-widget{',
-      'font-family:var(--font-body-family,var(--font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif));',
-      'color:var(--color-foreground,var(--color-base-text,inherit));',
-      'background:var(--color-background,var(--color-base-background-1,#fff));',
-      'border-radius:var(--buttons-radius,4px);',
-      'box-sizing:border-box;line-height:1.5;-webkit-font-smoothing:antialiased;',
-      '--sr-accent:var(--color-button,var(--color-base-accent-1,#222));',
-    '}',
-    '.sr-widget *,.sr-widget *::before,.sr-widget *::after{box-sizing:border-box;}',
-    '.sr-dismiss{',
-      'position:absolute;top:8px;right:8px;width:28px;height:28px;',
-      'border:none;background:transparent;color:var(--color-foreground,inherit);',
-      'font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;',
-      'opacity:0.6;z-index:10;border-radius:50%;transition:opacity 150ms,background 150ms;',
-    '}',
-    '.sr-dismiss:hover{opacity:1;background:rgba(0,0,0,0.05);}',
-    '.sr-widget a{color:inherit;text-decoration:none;}',
-    '.sr-widget img{display:block;max-width:100%;height:auto;}',
-    '@media(max-width:749px){.sr-widget{font-size:14px;}}'
-  ].join('');
+  function buildBaseCSS() {
+    var s = window.SmartRecStyles || {};
+    var accent = s.accentColor || 'var(--color-button,var(--color-base-accent-1,#222))';
+    var text = s.textColor || 'var(--color-foreground,var(--color-base-text,inherit))';
+    var bg = s.bgColor || 'var(--color-background,var(--color-base-background-1,#fff))';
+    var radius = (s.borderRadius != null ? s.borderRadius + 'px' : 'var(--buttons-radius,4px)');
+    var fontSize = (s.fontSize || 14) + 'px';
+    var btnStyle = s.buttonStyle || 'filled';
 
-  injectStyles('sr-base', BASE_CSS);
+    var btnFilled = 'background:' + accent + ';color:#fff;border:1px solid ' + accent + ';';
+    var btnOutline = 'background:transparent;color:' + accent + ';border:1px solid ' + accent + ';';
+    var btnSoft = 'background:' + accent + '15;color:' + accent + ';border:1px solid transparent;';
+    var btnCSS = btnStyle === 'outline' ? btnOutline : btnStyle === 'soft' ? btnSoft : btnFilled;
+
+    return [
+      '.sr-widget{',
+        'font-family:var(--font-body-family,var(--font-family,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif));',
+        'color:' + text + ';',
+        'background:' + bg + ';',
+        'border-radius:' + radius + ';',
+        'font-size:' + fontSize + ';',
+        'box-sizing:border-box;line-height:1.5;-webkit-font-smoothing:antialiased;',
+        '--sr-accent:' + accent + ';',
+        '--sr-text:' + text + ';',
+        '--sr-bg:' + bg + ';',
+        '--sr-radius:' + radius + ';',
+        '--sr-font-size:' + fontSize + ';',
+      '}',
+      '.sr-widget *,.sr-widget *::before,.sr-widget *::after{box-sizing:border-box;}',
+      '.sr-widget .sr-btn{' + btnCSS + 'border-radius:' + radius + ';cursor:pointer;transition:opacity 150ms;}',
+      '.sr-widget .sr-btn:hover{opacity:0.85;}',
+      '.sr-dismiss{',
+        'position:absolute;top:8px;right:8px;width:28px;height:28px;',
+        'border:none;background:transparent;color:' + text + ';',
+        'font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;',
+        'opacity:0.6;z-index:10;border-radius:50%;transition:opacity 150ms,background 150ms;',
+      '}',
+      '.sr-dismiss:hover{opacity:1;background:rgba(0,0,0,0.05);}',
+      '.sr-widget a{color:inherit;text-decoration:none;}',
+      '.sr-widget img{display:block;max-width:100%;height:auto;}',
+      '@media(max-width:749px){.sr-widget{font-size:' + Math.max(parseInt(fontSize) - 1, 12) + 'px;}}',
+      s.customCSS || ''
+    ].join('');
+  }
+
+  injectStyles('sr-base', buildBaseCSS());
+
+  window.SmartRecApplyStyles = function(newStyles) {
+    window.SmartRecStyles = newStyles;
+    var el = document.getElementById('sr-base');
+    if (el) el.textContent = buildBaseCSS();
+    applyLiquidBlockStyles(newStyles);
+  };
+
+  function applyLiquidBlockStyles(s) {
+    if (!s) return;
+    var accent = s.accentColor;
+    var text = s.textColor;
+    var bg = s.bgColor;
+    var radius = s.borderRadius != null ? s.borderRadius + 'px' : null;
+    var fontSize = s.fontSize ? s.fontSize + 'px' : null;
+    var btnStyle = s.buttonStyle || 'filled';
+    var title = s.widgetTitle;
+
+    var css = [];
+
+    if (bg) {
+      css.push('.sr-ph-popup{background:' + bg + ' !important;}');
+      css.push('.sr-ph-trigger{background:' + bg + ' !important;}');
+    }
+    if (text) {
+      css.push('.sr-ph-popup-title{color:' + text + ' !important;}');
+      css.push('.sr-ph-popup-sub{color:' + text + ' !important;}');
+      css.push('.sr-ph-name{color:' + text + ' !important;}');
+      css.push('.sr-ph-price{color:' + text + ' !important;}');
+      css.push('.sr-ph-info{color:' + text + ' !important;}');
+      css.push('.sr-ph-trigger{color:' + text + ' !important;}');
+      css.push('.sr-ph-trigger-label{color:' + text + ' !important;}');
+      css.push('.sr-ph-trigger-hint{color:' + text + ' !important;}');
+      css.push('.sr-ph-close{color:' + text + ' !important;}');
+    }
+    if (radius) {
+      css.push('.sr-ph-popup{border-radius:' + radius + ' !important;}');
+      css.push('.sr-ph-trigger{border-radius:' + radius + ' !important;}');
+      css.push('.sr-ph-atc{border-radius:' + radius + ' !important;}');
+      css.push('.sr-ph-view{border-radius:' + radius + ' !important;}');
+      css.push('.sr-ph-img{border-radius:' + radius + ' !important;}');
+    }
+    if (fontSize) {
+      css.push('.sr-ph-popup-title{font-size:' + (parseInt(fontSize) + 2) + 'px !important;}');
+      css.push('.sr-ph-name{font-size:' + fontSize + ' !important;}');
+      css.push('.sr-ph-price{font-size:' + (parseInt(fontSize) + 1) + 'px !important;}');
+      css.push('.sr-ph-popup-sub{font-size:' + (parseInt(fontSize) - 1) + 'px !important;}');
+    }
+
+    if (accent) {
+      if (btnStyle === 'filled') {
+        css.push('.sr-ph-atc{background:' + accent + ' !important;color:#fff !important;border-color:' + accent + ' !important;}');
+      } else if (btnStyle === 'outline') {
+        css.push('.sr-ph-atc{background:transparent !important;color:' + accent + ' !important;border:1px solid ' + accent + ' !important;}');
+      } else if (btnStyle === 'text') {
+        css.push('.sr-ph-atc{background:transparent !important;color:' + accent + ' !important;border:none !important;text-decoration:underline !important;}');
+      } else {
+        css.push('.sr-ph-atc{background:' + accent + ' !important;color:#fff !important;border-color:' + accent + ' !important;}');
+      }
+      css.push('.sr-ph-view{border-color:' + accent + ' !important;color:' + accent + ' !important;}');
+    }
+
+    if (s.customCSS) css.push(s.customCSS);
+
+    var tag = document.getElementById('sr-liquid-override');
+    if (!tag) {
+      tag = document.createElement('style');
+      tag.id = 'sr-liquid-override';
+      document.body.appendChild(tag);
+    }
+    tag.textContent = css.join('');
+
+    if (title) {
+      var subEls = document.querySelectorAll('.sr-ph-popup-sub');
+      for (var j = 0; j < subEls.length; j++) {
+        subEls[j].textContent = title;
+      }
+    }
+  }
 
   // ================================================================
   // COMPONENT 1: Alternative Nudge
   // UC-01: Hesitating Shopper — popup with Add to Cart
   // ================================================================
 
-  function getCartSections() {
-    var s = [];
-    if (document.querySelector('cart-notification')) s.push('cart-notification-product', 'cart-notification-button', 'cart-icon-bubble');
-    if (document.querySelector('cart-drawer')) s.push('cart-drawer', 'cart-icon-bubble');
-    if (s.length === 0) s.push('cart-icon-bubble');
-    return s.join(',');
+  function shopifyRoot() {
+    return (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
   }
 
-  function refreshCartUI(data) {
-    var sections = data.sections || {};
-    var keys = Object.keys(sections);
-    for (var i = 0; i < keys.length; i++) {
-      var html = sections[keys[i]];
-      if (!html) continue;
-      var tmp = document.createElement('div');
-      tmp.innerHTML = html;
-      var sectionEl = document.getElementById('shopify-section-' + keys[i]);
-      if (sectionEl) {
-        var inner = tmp.querySelector('.shopify-section');
-        sectionEl.innerHTML = inner ? inner.innerHTML : html;
-      }
-    }
+  function isThemeEditor() {
+    return !!(window.Shopify && window.Shopify.designMode);
+  }
 
-    fetch('/cart.js').then(function(r) { return r.json(); }).then(function(cart) {
-      var countEls = document.querySelectorAll('.cart-count-bubble span, [data-cart-count]');
+  function refreshCartUI() {
+    fetch(shopifyRoot() + 'cart.js', { headers: { 'Accept': 'application/json' } })
+    .then(function(r) { return r.json(); })
+    .then(function(cart) {
+      var countEls = document.querySelectorAll(
+        '.cart-count-bubble span, [data-cart-count], .cart-count, .js-cart-count, #cart-icon-bubble span'
+      );
       for (var j = 0; j < countEls.length; j++) countEls[j].textContent = cart.item_count;
-    });
+      var bubbles = document.querySelectorAll('.cart-count-bubble');
+      for (var k = 0; k < bubbles.length; k++) {
+        if (cart.item_count > 0) bubbles[k].removeAttribute('hidden');
+      }
+      try {
+        document.documentElement.dispatchEvent(
+          new CustomEvent('cart:refresh', { bubbles: true, detail: { cart: cart } })
+        );
+      } catch(e) {}
+    }).catch(function() {});
 
     var cn = document.querySelector('cart-notification');
-    if (cn && typeof cn.renderContents === 'function') {
-      cn.renderContents(data);
-    } else if (cn) {
-      cn.classList.add('animate', 'active');
-      cn.removeAttribute('hidden');
+    if (cn) {
+      if (typeof cn.open === 'function') { cn.open(); }
+      else { cn.classList.add('animate', 'active'); cn.removeAttribute('hidden'); }
     }
 
     var cd = document.querySelector('cart-drawer');
     if (cd) {
-      if (typeof cd.renderContents === 'function') { cd.renderContents(data); }
-      else { cd.classList.add('active'); var det = cd.querySelector('details'); if (det) det.setAttribute('open', ''); }
+      if (typeof cd.open === 'function') { cd.open(); }
+      else { cd.classList.add('active', 'is-open'); var det = cd.querySelector('details'); if (det) det.setAttribute('open', ''); }
     }
+
+    fetch(shopifyRoot() + '?sections=cart-notification-product,cart-notification-button,cart-icon-bubble,cart-drawer')
+    .then(function(r) { return r.json(); })
+    .then(function(sections) {
+      var keys = Object.keys(sections);
+      for (var i = 0; i < keys.length; i++) {
+        var el = document.getElementById('shopify-section-' + keys[i]);
+        if (el && sections[keys[i]]) {
+          var tmp = document.createElement('div');
+          tmp.innerHTML = sections[keys[i]];
+          var inner = tmp.querySelector('.shopify-section');
+          el.innerHTML = inner ? inner.innerHTML : sections[keys[i]];
+        }
+      }
+    }).catch(function() {});
 
     try { document.dispatchEvent(new CustomEvent('cart:updated')); } catch(e) {}
   }
 
-  function addToCart(variantId, btn, closePopupFn) {
+  function addToCart(variantId, btn, closePopupFn, widgetType, productId, productPrice) {
     if (!variantId) { btn.textContent = 'Không có variant'; return; }
+
+    if (isThemeEditor()) {
+      btn.textContent = '✓ Đã thêm (preview)';
+      btn.style.background = '#059669'; btn.style.borderColor = '#059669'; btn.style.color = '#fff';
+      setTimeout(function() {
+        btn.textContent = 'Thêm vào giỏ';
+        btn.style.background = ''; btn.style.borderColor = ''; btn.style.color = '';
+      }, 1500);
+      return;
+    }
+
+    var origText = btn.textContent;
     btn.textContent = 'Đang thêm...';
     btn.disabled = true;
-    fetch('/cart/add.js', {
+
+    var formData = new FormData();
+    formData.append('id', variantId);
+    formData.append('quantity', '1');
+
+    fetch(shopifyRoot() + 'cart/add.js', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify({ items: [{ id: variantId, quantity: 1 }], sections: getCartSections() })
+      body: formData
     }).then(function(res) {
-      return res.json().then(function(d) { return { ok: res.ok, data: d }; });
-    }).then(function(result) {
-      if (result.ok) {
-        btn.textContent = '✓ Đã thêm';
-        btn.style.background = '#059669';
-        btn.style.borderColor = '#059669';
-        btn.style.color = '#fff';
-        refreshCartUI(result.data);
-        if (closePopupFn) closePopupFn();
-        setTimeout(function() {
-          btn.textContent = 'Thêm vào giỏ';
-          btn.style.background = '';
-          btn.style.borderColor = '';
-          btn.style.color = '';
-          btn.disabled = false;
-        }, 2000);
-      } else {
-        btn.textContent = result.data.description || 'Lỗi — thử lại';
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).then(function(item) {
+      btn.textContent = '✓ Đã thêm';
+      btn.style.background = '#059669';
+      btn.style.borderColor = '#059669';
+      btn.style.color = '#fff';
+
+      refreshCartUI();
+      if (closePopupFn) closePopupFn();
+
+      try {
+        var atcValue = 0;
+        if (productPrice) {
+          atcValue = parseFloat(String(productPrice).replace(/[^\d.]/g, '')) || 0;
+        } else if (item && item.price) {
+          atcValue = item.price;
+        }
+        trackEvent('widget_atc', widgetType || 'alternative_nudge', productId || item.product_id, atcValue);
+      } catch(e) { /* tracking must never break ATC */ }
+
+      setTimeout(function() {
+        btn.textContent = origText;
+        btn.style.background = '';
+        btn.style.borderColor = '';
+        btn.style.color = '';
         btn.disabled = false;
-      }
-    }).catch(function() {
+      }, 2500);
+    }).catch(function(err) {
+      console.error('[SmartRec] ATC error:', err);
       btn.textContent = 'Lỗi — thử lại';
       btn.disabled = false;
+      setTimeout(function() { btn.textContent = origText; btn.disabled = false; }, 3000);
     });
   }
 
@@ -272,17 +430,17 @@
     '.sr-alt-overlay--open{display:flex;opacity:1;}',
     '.sr-alt-popup{',
       'position:relative;width:100%;max-width:420px;max-height:85vh;overflow-y:auto;',
-      'padding:24px;border-radius:12px;background:#ffffff;',
+      'padding:24px;border-radius:var(--sr-radius,12px);background:var(--sr-bg,#ffffff);',
       'box-shadow:0 20px 60px rgba(0,0,0,0.2);',
     '}',
-    '.sr-alt-popup__title{font-size:16px;font-weight:600;margin:0 0 4px;padding-right:36px;color:var(--color-foreground,inherit);}',
-    '.sr-alt-popup__subtitle{font-size:13px;margin:0 0 16px;opacity:0.6;}',
+    '.sr-alt-popup__title{font-size:var(--sr-font-size,16px);font-weight:600;margin:0 0 4px;padding-right:36px;color:var(--sr-text,var(--color-foreground,inherit));}',
+    '.sr-alt-popup__subtitle{font-size:13px;margin:0 0 16px;opacity:0.6;color:var(--sr-text,inherit);}',
     '.sr-alt-popup__item{display:flex;gap:14px;padding:14px 0;}',
     '.sr-alt-popup__item+.sr-alt-popup__item{border-top:1px solid rgba(0,0,0,0.06);}',
     '.sr-alt-popup__img{width:100px;height:100px;object-fit:cover;border-radius:8px;flex-shrink:0;background:#f3f4f6;}',
     '.sr-alt-popup__info{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;}',
-    '.sr-alt-popup__name{font-size:15px;font-weight:500;margin:0 0 4px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}',
-    '.sr-alt-popup__price{font-size:16px;font-weight:700;margin:0 0 10px;}',
+    '.sr-alt-popup__name{font-size:var(--sr-font-size,15px);font-weight:500;margin:0 0 4px;color:var(--sr-text,inherit);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}',
+    '.sr-alt-popup__price{font-size:calc(var(--sr-font-size,15px) + 1px);font-weight:700;margin:0 0 10px;color:var(--sr-text,inherit);}',
     '.sr-alt-popup__actions{display:flex;gap:8px;flex-wrap:wrap;}',
     '.sr-alt-popup__atc{',
       'display:inline-flex;align-items:center;justify-content:center;gap:4px;',
@@ -304,7 +462,9 @@
     '.sr-alt-trigger{',
       'position:relative;display:flex;align-items:center;gap:8px;',
       'padding:12px 16px;margin:16px 0;',
+      'background:var(--sr-bg,var(--color-background,#fff));',
       'border:1px solid rgba(0,0,0,0.08);cursor:pointer;',
+      'border-radius:var(--sr-radius,var(--buttons-radius,4px));',
       'transition:border-color 150ms,box-shadow 150ms;',
     '}',
     '.sr-alt-trigger:hover{border-color:rgba(0,0,0,0.2);box-shadow:0 2px 8px rgba(0,0,0,0.06);}',
@@ -401,12 +561,12 @@
 
       var atcBtn = createElement('button', 'sr-alt-popup__atc', { 'type': 'button' });
       atcBtn.textContent = 'Thêm vào giỏ';
-      (function(vid, el) {
+      (function(vid, el, pid, pprice) {
         el.addEventListener('click', function(e) {
           e.stopPropagation();
-          addToCart(vid, el, closePopup);
+          addToCart(vid, el, closePopup, 'alternative_nudge', pid, pprice);
         });
-      })(product.variant_id, atcBtn);
+      })(product.variant_id, atcBtn, product.id, product.price);
 
       var viewBtn = createElement('a', 'sr-alt-popup__view', { 'href': product.url || '#' });
       viewBtn.textContent = 'Xem chi tiết';
@@ -451,6 +611,10 @@
       anchor.insertAdjacentElement('afterend', trigger);
     }
     fadeIn(trigger, NUDGE_DELAY);
+
+    for (var pi = 0; pi < products.length; pi++) {
+      trackEvent('impression', 'alternative_nudge', products[pi].id, 0);
+    }
   }
 
   // ================================================================
@@ -537,6 +701,9 @@
 
     document.body.appendChild(bar);
     fadeIn(bar, 0);
+
+    trackEvent('impression', 'comparison_bar', data.productA.id, 0);
+    trackEvent('impression', 'comparison_bar', data.productB.id, 0);
 
     // Build comparison panel
     var panel = createElement('div', 'sr-widget sr-compare-panel');
@@ -674,6 +841,7 @@
     panel.appendChild(tagContainer);
 
     document.body.appendChild(panel);
+    trackEvent('impression', 'tag_navigator', null, 0);
 
     requestAnimationFrame(function() {
       requestAnimationFrame(function() {
@@ -769,6 +937,10 @@
       anchor.insertAdjacentElement('afterend', container);
     }
     fadeIn(container, 0);
+
+    for (var ti = 0; ti < items.length; ti++) {
+      trackEvent('impression', 'trust_nudge', items[ti].product_id, 0);
+    }
   }
 
   // ── Action Dispatcher ───────────────────────────────────────────

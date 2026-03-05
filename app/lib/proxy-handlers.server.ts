@@ -5,6 +5,7 @@ import {
   shopPolicyCache,
   type CachedProduct,
 } from "./product-cache.server";
+import db from "../db.server";
 
 // Type for the admin GraphQL client from authenticate.public.appProxy
 type AdminClient = {
@@ -265,10 +266,32 @@ interface IntentRequestBody {
 }
 
 /**
- * POST /apps/smartrec/track — receive behavioral signals
+ * POST /apps/smartrec/track — receive behavioral signals & store events
  */
-export async function handleTrack(body: unknown) {
-  console.log("[SmartRec] Track:", JSON.stringify(body).slice(0, 200));
+export async function handleTrack(body: unknown, shop: string) {
+  const req = body as {
+    eventType?: string;
+    widgetType?: string;
+    productId?: string;
+    sessionId?: string;
+    value?: number;
+    metadata?: string;
+  };
+
+  if (!req.eventType) return { ok: false, error: "eventType required" };
+
+  await db.smartRecEvent.create({
+    data: {
+      shop,
+      eventType: req.eventType,
+      widgetType: req.widgetType || null,
+      productId: req.productId || null,
+      sessionId: req.sessionId || null,
+      value: req.value || 0,
+      metadata: req.metadata || null,
+    },
+  });
+
   return { ok: true };
 }
 
@@ -443,23 +466,56 @@ export async function handleProducts(
 }
 
 /**
- * GET /apps/smartrec/config — merchant widget settings
+ * GET /apps/smartrec/config — merchant widget settings + styles
  */
-export async function handleConfig(_params: URLSearchParams) {
+export async function handleConfig(params: URLSearchParams, shopOverride?: string) {
+  const shop = shopOverride || params.get("shop") || "";
+
+  if (shop) {
+    const settings = await db.smartRecSettings.findUnique({ where: { shop } });
+    if (settings) {
+      return {
+        enabled: settings.enabled,
+        thresholds: {
+          browsing: settings.thresholdBrowsing,
+          considering: settings.thresholdConsidering,
+          highConsideration: settings.thresholdHighIntent,
+          strongIntent: settings.thresholdStrongIntent,
+          readyToBuy: settings.thresholdReadyToBuy,
+        },
+        widgets: {
+          alternative_nudge: settings.alternativeNudge,
+          comparison_bar: settings.comparisonBar,
+          tag_navigator: settings.tagNavigator,
+          trust_nudge: settings.trustNudge,
+        },
+        styles: {
+          accentColor: settings.styleAccentColor,
+          textColor: settings.styleTextColor,
+          bgColor: settings.styleBgColor,
+          borderRadius: settings.styleBorderRadius,
+          fontSize: settings.styleFontSize,
+          buttonStyle: settings.styleButtonStyle,
+          customCSS: settings.styleCustomCSS,
+          widgetTitle: settings.widgetTitle,
+        },
+      };
+    }
+  }
+
   return {
     enabled: true,
-    thresholds: {
-      browsing: 30,
-      considering: 55,
-      highConsideration: 75,
-      strongIntent: 89,
-      readyToBuy: 90,
-    },
-    widgets: {
-      alternative_nudge: true,
-      comparison_bar: true,
-      tag_navigator: true,
-      trust_nudge: true,
+    thresholds: { browsing: 30, considering: 55, highConsideration: 75, strongIntent: 89, readyToBuy: 90 },
+    widgets: { alternative_nudge: true, comparison_bar: true, tag_navigator: true, trust_nudge: true },
+    styles: {
+      accentColor: "#000000",
+      textColor: "#1a1a1a",
+      bgColor: "#ffffff",
+      borderRadius: 8,
+      fontSize: 14,
+      buttonStyle: "filled",
+      customCSS: "",
+      widgetTitle: "Không chắc chắn? Khách hàng tương tự cũng xem những sản phẩm này.",
     },
   };
 }
