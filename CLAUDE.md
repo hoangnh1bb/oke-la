@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Shopify embedded app template using React Router v7 (file-system routing), Prisma with SQLite for session storage, and Shopify App Bridge v4 with Polaris web components.
+Shopify embedded app template using React Router v7 (file-system routing), Prisma with SQLite for session storage, and Shopify App Bridge v4 with Polaris web components. ESM (`"type": "module"`). Node.js `>=20.19 <22 || >=22.12`. Admin API version: `October25`.
 
 ## Commands
 
@@ -44,11 +44,13 @@ Routes are discovered automatically via `@react-router/fs-routes` (`flatRoutes()
 - `authenticate` — call `authenticate.admin(request)` in every protected route loader/action
 - `login` — used by the login page
 - `sessionStorage` — Prisma-backed (SQLite)
+- `unauthenticated` — access shop data without auth (e.g., webhook handlers)
+- `registerWebhooks` — re-register webhooks programmatically
 - `addDocumentResponseHeaders` — injected in `entry.server.tsx` for CSP headers
 
 ### UI Layer
 
-- Polaris web components (`s-page`, `s-button`, `s-section`, etc.) — typed via `@shopify/polaris-types`
+- Polaris web components (`s-page`, `s-button`, `s-section`, etc.) — typed via `@shopify/polaris-types` (included in `tsconfig.json` `types` array)
 - `AppProvider` from `@shopify/shopify-app-react-router/react` wraps all app routes
 - `useAppBridge()` for toasts, navigation, etc.
 - Navigation defined in `app.tsx` via `<s-app-nav>` element
@@ -72,6 +74,7 @@ Routes are discovered automatically via `@react-router/fs-routes` (`flatRoutes()
 - **GraphQL**: Use `admin.graphql()` from the authenticated session. Types generated to `app/types/`.
 - **Webhooks**: Declared in `shopify.app.toml`, not registered in code. Handlers are route files.
 - **ESLint**: Allows `variant` prop on unknown elements (Polaris web components). `shopify` is a readonly global (App Bridge).
+- **Route types**: `react-router typegen` generates types in `.react-router/types/` (gitignored, auto-generated). Run `npm run typecheck` to regenerate.
 
 ## Config Files
 
