@@ -66,40 +66,18 @@ export async function action({ request }: ActionFunctionArgs): Promise<Response>
 export default function AddonPurchase() {
   const { plan, hasAppearancePro, hasAnalyticsPro, preselectedAddon } = useLoaderData<LoaderData>();
 
-  if (plan === "free") {
-    return (
-      <s-page heading="Add-ons">
-        <s-banner tone="warning" style={{ marginBottom: "24px" }}>
-          <div>
-            <p style={{ marginBottom: "8px" }}>
-              <strong>⚠️ Add-ons yêu cầu gói Growth</strong>
-            </p>
-            <p style={{ fontSize: "14px" }}>
-              Vui lòng nâng cấp lên gói Growth ($11/tháng) để mua add-ons.
-            </p>
-          </div>
-        </s-banner>
-        
-        <div style={{ textAlign: "center", padding: "40px 0" }}>
-          <s-button variant="primary" href="/app/billing/subscribe" style={{ marginRight: "12px" }}>
-            Nâng cấp lên Growth
-          </s-button>
-          <s-button href="/app/pricing-dashboard">
-            Quay lại bảng giá
-          </s-button>
-        </div>
-      </s-page>
-    );
-  }
-
   return (
-    <s-page heading="Chọn Add-ons">
-      {/* Info Banner */}
+    <s-page heading="Choose Add-ons">
+      {/* Info Banner - UPDATED: Remove Growth requirement warning */}
       <s-banner tone="info" style={{ marginBottom: "32px" }}>
         <p>
-          <strong>📦 Add-ons nâng cao tính năng của gói Growth</strong>
+          <strong>📦 Add-ons can be purchased with any plan (FREE or GROWTH)</strong>
           <br />
-          Chọn add-on phù hợp với nhu cầu của bạn. Có thể mua riêng lẻ hoặc cả hai.
+          {plan === "free" && (
+            <span style={{ fontSize: "14px", color: "#6d7175" }}>
+              💡 Note: Add-ons do not increase the 500 interaction limit. Upgrade to GROWTH for unlimited.
+            </span>
+          )}
         </p>
       </s-banner>
 
@@ -111,7 +89,7 @@ export default function AddonPurchase() {
         marginBottom: "40px"
       }}>
         
-        {/* Giao Diện Pro */}
+        {/* Appearance Pro */}
         <div style={{
           border: hasAppearancePro 
             ? "2px solid #50C878" 
@@ -137,7 +115,7 @@ export default function AddonPurchase() {
               fontSize: "12px",
               fontWeight: "bold"
             }}>
-              ✓ ĐÃ KÍCH HOẠT
+              ✓ ACTIVATED
             </div>
           )}
           
@@ -154,13 +132,13 @@ export default function AddonPurchase() {
               fontSize: "12px",
               fontWeight: "bold"
             }}>
-              ĐƯỢC CHỌN
+              SELECTED
             </div>
           )}
           
           <div style={{ fontSize: "48px", marginBottom: "12px", textAlign: "center" }}>🎨</div>
           <h2 style={{ fontSize: "24px", marginBottom: "8px", fontWeight: "600", textAlign: "center" }}>
-            Giao Diện Pro
+            Appearance Pro
           </h2>
           <div style={{ 
             fontSize: "36px", 
@@ -169,7 +147,7 @@ export default function AddonPurchase() {
             textAlign: "center",
             color: "#202223"
           }}>
-            $5<span style={{ fontSize: "16px", fontWeight: "normal", color: "#6d7175" }}>/tháng</span>
+            $5<span style={{ fontSize: "16px", fontWeight: "normal", color: "#6d7175" }}>/month</span>
           </div>
 
           <ul style={{ 
@@ -180,16 +158,16 @@ export default function AddonPurchase() {
             lineHeight: "1.8"
           }}>
             <li style={{ padding: "8px 0", borderBottom: "1px solid #f4f6f8" }}>
-              ✅ Màu riêng cho từng widget
+              ✅ Per-widget colors
             </li>
             <li style={{ padding: "8px 0", borderBottom: "1px solid #f4f6f8" }}>
-              ✅ Style nút (solid/outline)
+              ✅ Button styles (solid/outline)
             </li>
             <li style={{ padding: "8px 0", borderBottom: "1px solid #f4f6f8" }}>
-              ✅ Text tùy chỉnh chi tiết
+              ✅ Detailed text customization
             </li>
             <li style={{ padding: "8px 0" }}>
-              ✅ Live preview trong admin
+              ✅ Live preview in admin
             </li>
           </ul>
 
@@ -201,34 +179,34 @@ export default function AddonPurchase() {
             fontSize: "13px",
             color: "#6d7175"
           }}>
-            <strong>Phù hợp cho:</strong>
+            <strong>Best for:</strong>
             <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-              <li>Shops cần branding nhất quán</li>
-              <li>Tùy chỉnh giao diện theo theme</li>
-              <li>A/B testing màu & text</li>
+              <li>Shops needing consistent branding</li>
+              <li>Theme-based appearance customization</li>
+              <li>A/B testing colors A/B testing màu & text text</li>
             </ul>
           </div>
 
           {hasAppearancePro ? (
             <>
               <s-button variant="secondary" fullWidth disabled>
-                ✓ Đã kích hoạt
+                ✓ Activated
               </s-button>
               <s-button variant="plain" fullWidth href="/app/settings/appearance-pro" style={{ marginTop: "8px" }}>
-                Mở cài đặt →
+                Open settings →
               </s-button>
             </>
           ) : (
             <Form method="post">
               <input type="hidden" name="addon" value="appearance_pro" />
               <s-button variant="primary" type="submit" fullWidth>
-                Mua ngay $5/tháng
+                Buy now $5/month
               </s-button>
             </Form>
           )}
         </div>
 
-        {/* Thống Kê Pro */}
+        {/* Analytics Pro */}
         <div style={{
           border: hasAnalyticsPro 
             ? "2px solid #50C878" 
@@ -254,7 +232,7 @@ export default function AddonPurchase() {
               fontSize: "12px",
               fontWeight: "bold"
             }}>
-              ✓ ĐÃ KÍCH HOẠT
+              ✓ ACTIVATED
             </div>
           )}
           
@@ -271,13 +249,13 @@ export default function AddonPurchase() {
               fontSize: "12px",
               fontWeight: "bold"
             }}>
-              ĐƯỢC CHỌN
+              SELECTED
             </div>
           )}
           
           <div style={{ fontSize: "48px", marginBottom: "12px", textAlign: "center" }}>📊</div>
           <h2 style={{ fontSize: "24px", marginBottom: "8px", fontWeight: "600", textAlign: "center" }}>
-            Thống Kê Pro
+            Analytics Pro
           </h2>
           <div style={{ 
             fontSize: "36px", 
@@ -286,7 +264,7 @@ export default function AddonPurchase() {
             textAlign: "center",
             color: "#202223"
           }}>
-            $7<span style={{ fontSize: "16px", fontWeight: "normal", color: "#6d7175" }}>/tháng</span>
+            $7<span style={{ fontSize: "16px", fontWeight: "normal", color: "#6d7175" }}>/month</span>
           </div>
 
           <ul style={{ 
@@ -297,16 +275,16 @@ export default function AddonPurchase() {
             lineHeight: "1.8"
           }}>
             <li style={{ padding: "8px 0", borderBottom: "1px solid #f4f6f8" }}>
-              ✅ Phân tích doanh thu chi tiết
+              ✅ Detailed revenue analysis
             </li>
             <li style={{ padding: "8px 0", borderBottom: "1px solid #f4f6f8" }}>
-              ✅ Biểu đồ xu hướng 7 ngày
+              ✅ 7-day trend charts
             </li>
             <li style={{ padding: "8px 0", borderBottom: "1px solid #f4f6f8" }}>
-              ✅ Top sản phẩm theo tương tác
+              ✅ Top products by interactions
             </li>
             <li style={{ padding: "8px 0" }}>
-              ✅ Theo dõi đơn hàng (24h window)
+              ✅ Order tracking (24h window)
             </li>
           </ul>
 
@@ -318,10 +296,10 @@ export default function AddonPurchase() {
             fontSize: "13px",
             color: "#6d7175"
           }}>
-            <strong>Phù hợp cho:</strong>
+            <strong>Best for:</strong>
             <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
-              <li>Shops cần đo ROI của app</li>
-              <li>Tối ưu product placement</li>
+              <li>Shops needing to measure app ROI</li>
+              <li>Optimize product placement</li>
               <li>Data-driven decisions</li>
             </ul>
           </div>
@@ -329,25 +307,25 @@ export default function AddonPurchase() {
           {hasAnalyticsPro ? (
             <>
               <s-button variant="secondary" fullWidth disabled>
-                ✓ Đã kích hoạt
+                ✓ Activated
               </s-button>
               <s-button variant="plain" fullWidth href="/app/analytics-pro" style={{ marginTop: "8px" }}>
-                Xem dashboard →
+                View dashboard →
               </s-button>
             </>
           ) : (
             <Form method="post">
               <input type="hidden" name="addon" value="analytics_pro" />
               <s-button variant="primary" type="submit" fullWidth>
-                Mua ngay $7/tháng
+                Buy now $7/month
               </s-button>
             </Form>
           )}
         </div>
       </div>
 
-      {/* Bundle Offer (if neither active) */}
-      {!hasAppearancePro && !hasAnalyticsPro && (
+      {/* Bundle Offer - UPDATED with discount */}
+      {!hasAppearancePro && !hasAnalyticsPro && plan === "growth" && (
         <div style={{
           background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
           color: "white",
@@ -357,25 +335,29 @@ export default function AddonPurchase() {
           textAlign: "center"
         }}>
           <h3 style={{ fontSize: "20px", marginBottom: "12px", fontWeight: "600" }}>
-            💎 Bundle Deal
+            💎 PRO Bundle (Better Value)
           </h3>
           <p style={{ fontSize: "16px", marginBottom: "16px", opacity: "0.9" }}>
-            Mua cả 2 add-ons chỉ với <strong>$12/tháng</strong> thay vì $5 + $7
+            Using GROWTH + want both add-ons?
           </p>
           <p style={{ fontSize: "32px", fontWeight: "bold", marginBottom: "8px" }}>
-            $12<span style={{ fontSize: "18px", fontWeight: "normal" }}>/tháng</span>
+            $20<span style={{ fontSize: "18px", fontWeight: "normal" }}>/month</span>
           </p>
-          <p style={{ fontSize: "14px", opacity: "0.8", marginBottom: "20px" }}>
-            Tiết kiệm $0/tháng (chương trình khuyến mãi sắp tới)
+          <p style={{ fontSize: "16px", marginBottom: "20px", opacity: "0.9" }}>
+            Instead of $23/month separately • <strong>Save $3/month</strong>
           </p>
-          <div style={{ fontSize: "13px", opacity: "0.9", fontStyle: "italic" }}>
-            * Hiện tại chưa có bundle discount. Mua riêng lẻ: $5 + $7 = $12/tháng
-          </div>
+          <p style={{ fontSize: "13px", opacity: "0.8", marginBottom: "16px" }}>
+            (GROWTH $11 + Appearance Pro $5 + Analytics Pro $7 = $23)<br />
+            PRO Bundle only $20 → Save $3/mo
+          </p>
+          <s-button href="/app/pricing-dashboard" style={{ background: "white", color: "#667eea" }}>
+            View PRO plan →
+          </s-button>
         </div>
       )}
 
       {/* Comparison Table */}
-      <s-section heading="So sánh Add-ons">
+      <s-section heading="Compare Add-ons">
         <div style={{ overflowX: "auto" }}>
           <table style={{ 
             width: "100%", 
@@ -385,20 +367,31 @@ export default function AddonPurchase() {
             <thead>
               <tr style={{ background: "#f9fafb" }}>
                 <th style={{ padding: "12px", textAlign: "left", borderBottom: "2px solid #dfe3e8" }}>
-                  Tính năng
+                  Feature
                 </th>
                 <th style={{ padding: "12px", textAlign: "center", borderBottom: "2px solid #dfe3e8" }}>
-                  🎨 Giao Diện Pro
+                  🎨 Appearance Pro
                 </th>
                 <th style={{ padding: "12px", textAlign: "center", borderBottom: "2px solid #dfe3e8" }}>
-                  📊 Thống Kê Pro
+                  📊 Analytics Pro
                 </th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td style={{ padding: "12px", borderBottom: "1px solid #f4f6f8" }}>
-                  Màu tùy chỉnh per-widget
+                  Requires GROWTH plan
+                </td>
+                <td style={{ padding: "12px", textAlign: "center", borderBottom: "1px solid #f4f6f8" }}>
+                  <span style={{ color: "#6d7175", fontSize: "14px" }}>No</span>
+                </td>
+                <td style={{ padding: "12px", textAlign: "center", borderBottom: "1px solid #f4f6f8" }}>
+                  <span style={{ color: "#6d7175", fontSize: "14px" }}>No</span>
+                </td>
+              </tr>
+              <tr>
+                <td style={{ padding: "12px", borderBottom: "1px solid #f4f6f8" }}>
+                  Per-widget color customization
                 </td>
                 <td style={{ padding: "12px", textAlign: "center", borderBottom: "1px solid #f4f6f8" }}>
                   <span style={{ color: "#50C878", fontSize: "18px" }}>✓</span>
@@ -409,7 +402,7 @@ export default function AddonPurchase() {
               </tr>
               <tr>
                 <td style={{ padding: "12px", borderBottom: "1px solid #f4f6f8" }}>
-                  Style nút (solid/outline)
+                  Button styles (solid/outline)
                 </td>
                 <td style={{ padding: "12px", textAlign: "center", borderBottom: "1px solid #f4f6f8" }}>
                   <span style={{ color: "#50C878", fontSize: "18px" }}>✓</span>
@@ -420,7 +413,7 @@ export default function AddonPurchase() {
               </tr>
               <tr>
                 <td style={{ padding: "12px", borderBottom: "1px solid #f4f6f8" }}>
-                  Text tùy chỉnh
+                  Text customization
                 </td>
                 <td style={{ padding: "12px", textAlign: "center", borderBottom: "1px solid #f4f6f8" }}>
                   <span style={{ color: "#50C878", fontSize: "18px" }}>✓</span>
@@ -475,7 +468,7 @@ export default function AddonPurchase() {
               </tr>
               <tr style={{ background: "#f9fafb", fontWeight: "600" }}>
                 <td style={{ padding: "12px", borderBottom: "2px solid #dfe3e8" }}>
-                  Giá/tháng
+                  Price/month
                 </td>
                 <td style={{ padding: "12px", textAlign: "center", borderBottom: "2px solid #dfe3e8", color: "#5C6AC4" }}>
                   $5
@@ -489,27 +482,32 @@ export default function AddonPurchase() {
         </div>
       </s-section>
 
-      {/* FAQ */}
-      <s-section heading="❓ Câu hỏi thường gặp">
+      {/* FAQ - UPDATED */}
+      <s-section heading="❓ Frequently Asked Questions">
         <div style={{ fontSize: "14px", lineHeight: "1.8" }}>
-          <p><strong>Q: Có thể mua 1 add-on rồi mua thêm add-on kia sau không?</strong></p>
+          <p><strong>Q: Can FREE plan purchase add-ons?</strong></p>
           <p style={{ color: "#6d7175", marginBottom: "16px" }}>
-            A: Có, add-ons độc lập với nhau. Mua lúc nào cũng được.
+            A: Có! Add-ons không yêu cầu gói GROWTH. Tuy nhiên, giới hạn 500 lượt vẫn áp dụng.
           </p>
 
-          <p><strong>Q: Có thể hủy add-on mà giữ gói Growth không?</strong></p>
+          <p><strong>Q: Mua add-ons với FREE có unlimited interactions không?</strong></p>
           <p style={{ color: "#6d7175", marginBottom: "16px" }}>
-            A: Có, add-ons riêng biệt với Growth. Hủy add-on không ảnh hưởng gói chính.
+            A: No, add-ons chỉ mở rộng tính năng. Muốn unlimited cần nâng cấp GROWTH.
           </p>
 
-          <p><strong>Q: Add-on có thời gian dùng thử không?</strong></p>
+          <p><strong>Q: Gói PRO bundle là gì?</strong></p>
           <p style={{ color: "#6d7175", marginBottom: "16px" }}>
-            A: Không, add-ons không có trial. Nhưng có thể hủy bất cứ lúc nào.
+            A: PRO = GROWTH + both add-ons for $20/month (save $3 vs buying separately).
           </p>
 
-          <p><strong>Q: Bundle deal khi nào có?</strong></p>
+          <p><strong>Q: Có thể mua 1 add-on rồi mua thêm sau không?</strong></p>
+          <p style={{ color: "#6d7175", marginBottom: "16px" }}>
+            A: Yes, add-ons are independent. Purchase anytime.
+          </p>
+
+          <p><strong>Q: Bundle PRO khi nào có?</strong></p>
           <p style={{ color: "#6d7175" }}>
-            A: Chương trình khuyến mãi bundle sẽ có trong tương lai. Theo dõi email để cập nhật.
+            A: Bundle purchase flow coming soon. Buy GROWTH + both add-ons separately = $23/mo. Bundle $20 will be available later.
           </p>
         </div>
       </s-section>
@@ -517,7 +515,7 @@ export default function AddonPurchase() {
       {/* Back Button */}
       <div style={{ textAlign: "center", marginTop: "32px", paddingTop: "24px", borderTop: "1px solid #dfe3e8" }}>
         <s-button href="/app/pricing-dashboard">
-          ← Quay lại bảng giá
+          ← Back to pricing
         </s-button>
       </div>
     </s-page>

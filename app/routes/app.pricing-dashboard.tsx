@@ -47,15 +47,15 @@ export default function PricingDashboard() {
   const { plan, usageCount, limit, percentage, hasAppearancePro, hasAnalyticsPro } = useLoaderData<LoaderData>();
 
   return (
-    <s-page heading="Chọn Gói Dịch Vụ">
+    <s-page heading="Choose Your Plan">
       {/* Current Usage Banner */}
       {plan === "free" && (
         <s-banner tone={usageCount >= 450 ? "warning" : "info"} style={{ marginBottom: "24px" }}>
           <div>
-            <p><strong>Sử dụng tháng này:</strong> {usageCount} / {limit} lượt tương tác ({percentage}%)</p>
+            <p><strong>Usage this month:</strong> {usageCount} / {limit} interactions ({percentage}%)</p>
             {usageCount >= 450 && (
               <p style={{ marginTop: "8px" }}>
-                Bạn sắp đạt giới hạn. Nâng cấp lên Growth để không giới hạn!
+                You are approaching your limit. Upgrade to Growth for unlimited interactions!
               </p>
             )}
           </div>
@@ -64,7 +64,7 @@ export default function PricingDashboard() {
 
       {plan === "growth" && (
         <s-banner tone="success" style={{ marginBottom: "24px" }}>
-          <p>✅ <strong>Gói Growth đang hoạt động</strong> — Không giới hạn tương tác | {usageCount} lượt tháng này</p>
+          <p>✅ <strong>Growth plan is active</strong> — Unlimited interactions | {usageCount} interactions this month</p>
         </s-banner>
       )}
 
@@ -97,13 +97,13 @@ export default function PricingDashboard() {
               fontSize: "12px",
               fontWeight: "bold"
             }}>
-              GÓI HIỆN TẠI
+              CURRENT PLAN
             </div>
           )}
           
           <h2 style={{ fontSize: "24px", marginBottom: "8px", fontWeight: "600" }}>FREE</h2>
           <div style={{ fontSize: "36px", fontWeight: "bold", marginBottom: "16px" }}>
-            $0<span style={{ fontSize: "16px", fontWeight: "normal" }}>/tháng</span>
+            $0<span style={{ fontSize: "16px", fontWeight: "normal" }}>/month</span>
           </div>
           
           <ul style={{ 
@@ -112,18 +112,18 @@ export default function PricingDashboard() {
             marginBottom: "24px",
             lineHeight: "1.8"
           }}>
-            <li>✅ 500 lượt tương tác/tháng</li>
-            <li>✅ Toàn bộ widget</li>
-            <li>✅ Tùy chỉnh màu chính</li>
-            <li>✅ Thống kê cơ bản</li>
-            <li>⚠️ Giới hạn soft (banner cảnh báo)</li>
+            <li>✅ 500 interactions/month</li>
+            <li>✅ All widgets</li>
+            <li>✅ Primary color customization</li>
+            <li>✅ Basic analytics</li>
+            <li>⚠️ Soft limit (banner warning)</li>
           </ul>
 
           {plan !== "free" ? (
-            <s-button disabled fullWidth>Gói hiện tại</s-button>
+            <s-button disabled fullWidth>Current plan</s-button>
           ) : (
             <s-button variant="secondary" fullWidth disabled>
-              Đang sử dụng
+              Currently using
             </s-button>
           )}
         </div>
@@ -150,7 +150,7 @@ export default function PricingDashboard() {
               fontSize: "12px",
               fontWeight: "bold"
             }}>
-              GÓI HIỆN TẠI
+              CURRENT PLAN
             </div>
           )}
 
@@ -167,13 +167,13 @@ export default function PricingDashboard() {
               fontSize: "12px",
               fontWeight: "bold"
             }}>
-              PHỔ BIẾN NHẤT
+              MOST POPULAR
             </div>
           )}
           
           <h2 style={{ fontSize: "24px", marginBottom: "8px", fontWeight: "600" }}>GROWTH</h2>
           <div style={{ fontSize: "36px", fontWeight: "bold", marginBottom: "16px" }}>
-            $11<span style={{ fontSize: "16px", fontWeight: "normal" }}>/tháng</span>
+            $11<span style={{ fontSize: "16px", fontWeight: "normal" }}>/month</span>
           </div>
           
           <ul style={{ 
@@ -184,19 +184,19 @@ export default function PricingDashboard() {
           }}>
             <li>✅ <strong>Không giới hạn</strong> tương tác</li>
             <li>✅ Dùng thử 7 ngày miễn phí</li>
-            <li>✅ Dashboard thống kê</li>
-            <li>✅ Top 10 sản phẩm</li>
-            <li>✅ Tùy chỉnh giao diện</li>
-            <li>✅ Hỗ trợ ưu tiên</li>
+            <li>✅ Analytics dashboard</li>
+            <li>✅ Top 10 products</li>
+            <li>✅ Appearance customization</li>
+            <li>✅ Priority support</li>
           </ul>
 
           {plan === "growth" ? (
             <s-button variant="secondary" fullWidth disabled>
-              Đang sử dụng
+              Currently using
             </s-button>
           ) : (
             <s-button variant="primary" fullWidth href="/app/billing/subscribe">
-              Nâng cấp ngay
+              Upgrade now
             </s-button>
           )}
         </div>
@@ -211,7 +211,7 @@ export default function PricingDashboard() {
         }}>
           <h2 style={{ fontSize: "24px", marginBottom: "8px", fontWeight: "600" }}>PRO</h2>
           <div style={{ fontSize: "36px", fontWeight: "bold", marginBottom: "16px" }}>
-            $23<span style={{ fontSize: "16px", fontWeight: "normal" }}>/tháng</span>
+            $20<span style={{ fontSize: "16px", fontWeight: "normal" }}>/month</span>
           </div>
           
           <p style={{ 
@@ -220,7 +220,7 @@ export default function PricingDashboard() {
             marginBottom: "16px",
             fontStyle: "italic"
           }}>
-            Growth + 2 Add-ons
+            Growth + 2 Add-ons • Save $3/month (vs $11+$5+$7=$23)
           </p>
 
           <ul style={{ 
@@ -229,21 +229,21 @@ export default function PricingDashboard() {
             marginBottom: "24px",
             lineHeight: "1.8"
           }}>
-            <li>✅ <strong>Tất cả tính năng Growth</strong></li>
+            <li>✅ <strong>All Growth features</strong></li>
             <li style={{ marginTop: "8px", paddingLeft: "16px", borderLeft: "3px solid #5C6AC4" }}>
-              <strong>+ Giao Diện Pro ($5)</strong>
+              <strong>+ Appearance Pro ($5)</strong>
               <ul style={{ fontSize: "14px", color: "#6d7175", marginTop: "4px" }}>
-                <li>→ Màu riêng cho từng widget</li>
-                <li>→ Style nút tùy chỉnh</li>
-                <li>→ Text tùy chỉnh</li>
+                <li>→ Per-widget colors</li>
+                <li>→ Custom button styles</li>
+                <li>→ Custom text</li>
               </ul>
             </li>
             <li style={{ marginTop: "8px", paddingLeft: "16px", borderLeft: "3px solid #5C6AC4" }}>
-              <strong>+ Thống Kê Pro ($7)</strong>
+              <strong>+ Analytics Pro ($7)</strong>
               <ul style={{ fontSize: "14px", color: "#6d7175", marginTop: "4px" }}>
-                <li>→ Phân tích doanh thu</li>
-                <li>→ Biểu đồ xu hướng 7 ngày</li>
-                <li>→ Theo dõi đơn hàng</li>
+                <li>→ Revenue analysis</li>
+                <li>→ 7-day trend charts</li>
+                <li>→ Order tracking</li>
               </ul>
             </li>
           </ul>
@@ -254,19 +254,19 @@ export default function PricingDashboard() {
             </s-button>
           ) : plan !== "growth" ? (
             <s-button variant="secondary" fullWidth disabled>
-              Cần gói Growth
+              Requires Growth
             </s-button>
           ) : (
             <s-button variant="secondary" fullWidth disabled>
-              Đã kích hoạt
+              Activated
             </s-button>
           )}
         </div>
       </div>
 
       {/* Add-ons Detail (for Growth users) */}
-      {plan === "growth" && (
-        <s-section heading="Mua Add-ons Riêng Lẻ">
+      {true && (
+        <s-section heading="Buy Add-ons Individually">
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
             
             <div style={{
@@ -275,24 +275,24 @@ export default function PricingDashboard() {
               padding: "20px",
               background: hasAppearancePro ? "#f4f6f8" : "white"
             }}>
-              <h3 style={{ fontSize: "18px", marginBottom: "8px" }}>🎨 Giao Diện Pro</h3>
-              <p style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "12px" }}>$5/tháng</p>
+              <h3 style={{ fontSize: "18px", marginBottom: "8px" }}>🎨 Appearance Pro</h3>
+              <p style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "12px" }}>$5/month</p>
               <ul style={{ fontSize: "14px", lineHeight: "1.6", marginBottom: "16px" }}>
-                <li>Màu riêng cho từng widget</li>
+                <li>Per-widget colors</li>
                 <li>Style nút (solid/outline)</li>
-                <li>Text tùy chỉnh</li>
+                <li>Custom text</li>
                 <li>Live preview</li>
               </ul>
               {hasAppearancePro ? (
                 <>
-                  <s-button variant="secondary" fullWidth disabled>Đã kích hoạt</s-button>
+                  <s-button variant="secondary" fullWidth disabled>Activated</s-button>
                   <s-button variant="plain" fullWidth href="/app/settings/appearance-pro" style={{ marginTop: "8px" }}>
-                    Cài đặt →
+                    Settings →
                   </s-button>
                 </>
               ) : (
                 <s-button variant="primary" fullWidth href="/app/billing/addon?addon=appearance_pro">
-                  Mua ngay
+                  Buy now
                 </s-button>
               )}
             </div>
@@ -303,24 +303,24 @@ export default function PricingDashboard() {
               padding: "20px",
               background: hasAnalyticsPro ? "#f4f6f8" : "white"
             }}>
-              <h3 style={{ fontSize: "18px", marginBottom: "8px" }}>📊 Thống Kê Pro</h3>
-              <p style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "12px" }}>$7/tháng</p>
+              <h3 style={{ fontSize: "18px", marginBottom: "8px" }}>📊 Analytics Pro</h3>
+              <p style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "12px" }}>$7/month</p>
               <ul style={{ fontSize: "14px", lineHeight: "1.6", marginBottom: "16px" }}>
-                <li>Phân tích doanh thu chi tiết</li>
-                <li>Biểu đồ xu hướng 7 ngày</li>
+                <li>Revenue analysis chi tiết</li>
+                <li>7-day trend charts</li>
                 <li>Top sản phẩm theo tương tác</li>
-                <li>Theo dõi đơn hàng</li>
+                <li>Order tracking</li>
               </ul>
               {hasAnalyticsPro ? (
                 <>
-                  <s-button variant="secondary" fullWidth disabled>Đã kích hoạt</s-button>
+                  <s-button variant="secondary" fullWidth disabled>Activated</s-button>
                   <s-button variant="plain" fullWidth href="/app/analytics-pro" style={{ marginTop: "8px" }}>
-                    Xem dashboard →
+                    View dashboard →
                   </s-button>
                 </>
               ) : (
                 <s-button variant="primary" fullWidth href="/app/billing/addon?addon=analytics_pro">
-                  Mua ngay
+                  Buy now
                 </s-button>
               )}
             </div>
@@ -329,26 +329,26 @@ export default function PricingDashboard() {
       )}
 
       {/* FAQ Section */}
-      <s-section heading="❓ Câu hỏi thường gặp">
+      <s-section heading="❓ Frequently Asked Questions">
         <div style={{ fontSize: "14px", lineHeight: "1.8" }}>
-          <p><strong>Q: Có thể hủy gói bất cứ lúc nào không?</strong></p>
+          <p><strong>Q: Can I cancel my plan anytime?</strong></p>
           <p style={{ color: "#6d7175", marginBottom: "16px" }}>
-            A: Có, bạn có thể hủy bất cứ lúc nào trong Shopify Admin. Không tính phí khi hủy.
+            A: Yes, you can cancel anytime in Shopify Admin. No cancellation fees.
           </p>
 
-          <p><strong>Q: Dùng thử 7 ngày có tính phí không?</strong></p>
+          <p><strong>Q: Is the 7-day trial free?</strong></p>
           <p style={{ color: "#6d7175", marginBottom: "16px" }}>
-            A: Không, 7 ngày đầu hoàn toàn miễn phí. Bạn có thể hủy trước khi kết thúc thời gian thử.
+            A: No, the first 7 days are completely free. You can cancel before trial ends.
           </p>
 
-          <p><strong>Q: Gói FREE có bị chặn khi vượt 500 lượt không?</strong></p>
+          <p><strong>Q: Will FREE plan be blocked after 500 interactions?</strong></p>
           <p style={{ color: "#6d7175", marginBottom: "16px" }}>
-            A: Không, chỉ hiện banner cảnh báo. Widget vẫn hoạt động bình thường.
+            A: No, only a warning banner is shown. Widgets continue to work normally.
           </p>
 
-          <p><strong>Q: Add-on có thể mua riêng không cần Growth?</strong></p>
+          <p><strong>Q: Can I buy add-ons without Growth?</strong></p>
           <p style={{ color: "#6d7175" }}>
-            A: Không, add-ons yêu cầu gói Growth đang hoạt động.
+            A: Yes! FREE plan can purchase add-ons. However, the 500 interaction limit still applies.
           </p>
         </div>
       </s-section>

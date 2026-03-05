@@ -1,9 +1,21 @@
 import type { ActionFunctionArgs } from "react-router";
 import db from "../db.server";
+import { rateLimit } from "../middleware/rate-limit.server";
 
 export async function action({ request }: ActionFunctionArgs) {
+  // CORS headers
+  const headers = {
+    "Access-Control-Allow-Origin": "*", // TODO: Restrict to shop domains
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers });
+  }
+
   if (request.method !== "POST") {
-    return Response.json({ error: "Method not allowed" }, { status: 405 });
+    return Response.json({ error: "Method not allowed" }, { status: 405, headers });
   }
 
   try {
@@ -13,10 +25,19 @@ export async function action({ request }: ActionFunctionArgs) {
     if (!shop || !widgetType || !eventType) {
       return Response.json(
         { error: "Missing required fields: shop, widgetType, eventType" },
-        { status: 400 }
+        { status: 400, headers }
       );
     }
 
+    // Rate limiting
+    if (!rateLimit("track", shop)) {
+      return Response.json(
+        { error: "Rate limit exceeded. Try again later." },
+        { status: 429, headers }
+      );
+    }
+
+    // Log interaction
     await db.usageLog.create({
       data: {
         shopId: shop,
@@ -28,6 +49,7 @@ export async function action({ request }: ActionFunctionArgs) {
       },
     });
 
+    // Get current month usage
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
@@ -52,9 +74,9 @@ export async function action({ request }: ActionFunctionArgs) {
       limit,
       plan,
       shouldShowBanner: plan === "free" && count >= 450,
-    });
+    }, { headers });
   } catch (error) {
     console.error("Error tracking interaction:", error);
-    return Response.json({ error: "Internal server error" }, { status: 500 });
+    return Response.json({ error: "Internal server error" }, { status: 500, headers });
   }
 }
