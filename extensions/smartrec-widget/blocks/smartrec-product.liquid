@@ -1,0 +1,31 @@
+{% comment %}
+  SmartRec Signal Collector — Product Page
+  Injects signal-collector.js with product context data attributes.
+  Tracks behavioral signals and computes intent score client-side.
+{% endcomment %}
+
+<div id="smartrec-root" style="display:none"
+  data-shop="{{ shop.permanent_domain }}"
+  data-product-id="{{ product.id }}"
+  data-product-type="{{ product.type | escape }}"
+  data-product-tags="{{ product.tags | join: ',' }}"
+  data-product-price="{{ product.price | money_without_currency }}"
+  data-product-title="{{ product.title | escape }}"
+  data-product-image="{{ product.featured_image | image_url: width: 160 }}"
+  data-proxy-base="/apps/smartrec"
+  data-page-type="product">
+</div>
+
+<script src="{{ 'widget-renderer.js' | asset_url }}" async></script>
+<script src="{{ 'signal-collector.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "SmartRec Signal Collector",
+  "target": "section",
+  "enabled_on": {
+    "templates": ["product"]
+  },
+  "settings": []
+}
+{% endschema %}
