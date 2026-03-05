@@ -1,0 +1,24 @@
+{% comment %}
+  SmartRec Cart Monitor
+  Tracks cart hesitation signal (idle >60s without checkout).
+{% endcomment %}
+
+<div id="smartrec-root" style="display:none"
+  data-shop="{{ shop.permanent_domain }}"
+  data-proxy-base="/apps/smartrec"
+  data-page-type="cart">
+</div>
+
+<script src="{{ 'widget-renderer.js' | asset_url }}" async></script>
+<script src="{{ 'signal-collector.js' | asset_url }}" defer></script>
+
+{% schema %}
+{
+  "name": "SmartRec Cart Monitor",
+  "target": "section",
+  "enabled_on": {
+    "templates": ["cart"]
+  },
+  "settings": []
+}
+{% endschema %}

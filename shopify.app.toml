@@ -1,35 +1,30 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "028379a848cfb92752ade9ef6d51b969"
-name = "plug-play"
-application_url = "https://vulnerable-degree-growing-proposal.trycloudflare.com/"
+client_id = "9e51a9e86e45cefa84842d1b827811f4"
+name = "clemdev"
+application_url = "https://example.com"
 embedded = true
-handle = "pagefly-30"
-
-[webhooks]
-api_version = "2023-07"
-
-  [[webhooks.subscriptions]]
-  topics = [ "app/scopes_update" ]
-  uri = "/webhooks/app/scopes_update"
-
-  [[webhooks.subscriptions]]
-  topics = [ "app/uninstalled" ]
-  uri = "/webhooks/app/uninstalled"
-
-[access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_content,read_orders,read_products,read_themes,write_content,write_products,write_themes"
-
-[auth]
-redirect_urls = [
-  "https://vulnerable-degree-growing-proposal.trycloudflare.com/auth/callback",
-  "https://vulnerable-degree-growing-proposal.trycloudflare.com/auth/shopify/callback",
-  "https://vulnerable-degree-growing-proposal.trycloudflare.com/api/auth/callback"
-]
-
-[pos]
-embedded = false
+handle = "clemdev"
 
 [build]
 automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2026-01"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_products,read_orders"
+optional_scopes = [ ]
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [ ]
+
+[app_proxy]
+url = "https://vulnerable-degree-growing-proposal.trycloudflare.com/api/proxy"
+subpath = "smartrec"
+prefix = "apps"
+
+[pos]
+embedded = false
