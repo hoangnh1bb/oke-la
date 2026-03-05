@@ -47,6 +47,7 @@ export interface SignalPayload {
   signals: SignalData;
   viewedProducts: ViewedProduct[];
   currentProduct: CurrentProduct | null;
+  cartProductIds: string[];
   backNavCount: number;
 }
 

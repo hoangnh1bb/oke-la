@@ -180,6 +180,76 @@ export async function fetchShopifyRecommendations(
 }
 
 /**
+ * Fetch complementary products via Storefront API (COMPLEMENTARY intent).
+ * "Pair it with" — products that go well with cart items.
+ * Requires Shopify Search & Discovery app config for best results.
+ */
+export async function fetchComplementaryProducts(
+  shop: string,
+  productId: string,
+  limit: number,
+): Promise<ShopifyProduct[]> {
+  const cacheKey = `complementary:${shop}:${productId}`;
+  const cached = getCached<ShopifyProduct[]>(cacheKey);
+  if (cached) return cached.slice(0, limit);
+
+  try {
+    const { storefront } = await unauthenticated.storefront(shop);
+
+    const query = `#graphql
+      query SmartRecComplementary($productId: ID!) {
+        productRecommendations(productId: $productId, intent: COMPLEMENTARY) {
+          id
+          title
+          tags
+          productType
+          featuredImage {
+            url
+          }
+          priceRange {
+            minVariantPrice {
+              amount
+              currencyCode
+            }
+          }
+        }
+      }
+    `;
+
+    const response = await storefront.graphql(query, {
+      variables: { productId },
+    });
+
+    const data = await response.json();
+    const products: ShopifyProduct[] = (data.data?.productRecommendations || [])
+      .map((p: {
+        id: string;
+        title: string;
+        tags: string[];
+        productType: string;
+        featuredImage?: { url?: string };
+        priceRange?: { minVariantPrice?: { amount?: string } };
+      }) => ({
+        id: p.id,
+        title: p.title,
+        price: p.priceRange?.minVariantPrice?.amount || "0",
+        image: p.featuredImage?.url || "",
+        tags: p.tags || [],
+        productType: p.productType,
+        totalInventory: 0,
+      }));
+
+    setCached(cacheKey, products);
+    return products.slice(0, limit);
+  } catch (err) {
+    if (console && console.debug) {
+      console.debug("[SmartRec] fetchComplementaryProducts failed:", err);
+    }
+    return [];
+  }
+}
+
+/**
  * Fetch recent orders to build substitution patterns.
  * Pattern: customer viewed product A (in browsing session) but bought product B.
  * Simplified MVP: find products frequently bought together or in same orders.
