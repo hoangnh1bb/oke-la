@@ -2,7 +2,6 @@ import { data } from "react-router";
 import {
   productCache,
   productListCache,
-  shopPolicyCache,
   type CachedProduct,
 } from "./product-cache.server";
 
@@ -78,16 +77,6 @@ const PRODUCTS_BY_TYPE_QUERY = `#graphql
         metafieldReviewCount: metafield(namespace: "reviews", key: "rating_count") {
           value
         }
-      }
-    }
-  }
-`;
-
-const SHOP_POLICY_QUERY = `#graphql
-  query ShopPolicy {
-    shop {
-      refundPolicy {
-        body
       }
     }
   }
@@ -217,31 +206,6 @@ async function fetchSimilarProducts(
   } catch (e) {
     console.error("[SmartRec] fetchSimilarProducts error:", e);
     return [];
-  }
-}
-
-async function fetchShopPolicies(
-  admin: AdminClient,
-  shop: string,
-): Promise<{ hasFreeReturn: boolean }> {
-  const cacheKey = `${shop}:policies`;
-  const cached = shopPolicyCache.get(cacheKey);
-  if (cached) return cached;
-
-  try {
-    const response = await admin.graphql(SHOP_POLICY_QUERY);
-    const responseJson = await response.json();
-    const body = (responseJson.data?.shop?.refundPolicy?.body || "").toLowerCase();
-    const hasFreeReturn =
-      body.includes("miễn phí") ||
-      body.includes("free") ||
-      body.includes("không mất phí");
-    const policies = { hasFreeReturn };
-    shopPolicyCache.set(cacheKey, policies, 24 * 60 * 60 * 1000);
-    return policies;
-  } catch (e) {
-    console.error("[SmartRec] fetchShopPolicies error:", e);
-    return { hasFreeReturn: false };
   }
 }
 
@@ -382,34 +346,6 @@ export async function handleIntent(
     }
   }
 
-  // UC-04: Trust Nudge
-  if (
-    pageType === "cart" &&
-    sess.cartHesitation &&
-    sess.cartHesitation > 60 &&
-    sess.cartItems &&
-    sess.cartItems.length > 0
-  ) {
-    const policies = await fetchShopPolicies(admin, shop);
-    const cartProducts = await Promise.all(
-      sess.cartItems.slice(0, 5).map((id) => fetchProductById(id, admin, shop)),
-    );
-
-    const items = cartProducts
-      .filter((p): p is CachedProduct => p !== null)
-      .map((p) => ({
-        product_id: p.id,
-        title: p.title,
-        rating: p.rating,
-        review_count: p.review_count,
-        has_free_return: policies.hasFreeReturn,
-      }));
-
-    if (items.length > 0) {
-      return { type: "trust_nudge", data: { items } };
-    }
-  }
-
   return { type: "none" };
 }
 
@@ -459,7 +395,6 @@ export async function handleConfig(_params: URLSearchParams) {
       alternative_nudge: true,
       comparison_bar: true,
       tag_navigator: true,
-      trust_nudge: true,
     },
   };
 }

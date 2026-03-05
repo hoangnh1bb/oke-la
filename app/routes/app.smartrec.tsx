@@ -71,7 +71,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       alternativeNudge: boolField("alternativeNudge"),
       comparisonBar: boolField("comparisonBar"),
       tagNavigator: boolField("tagNavigator"),
-      trustNudge: boolField("trustNudge"),
       thresholdBrowsing: intField("thresholdBrowsing", 30),
       thresholdConsidering: intField("thresholdConsidering", 55),
       thresholdHighIntent: intField("thresholdHighIntent", 75),
@@ -83,7 +82,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       alternativeNudge: boolField("alternativeNudge"),
       comparisonBar: boolField("comparisonBar"),
       tagNavigator: boolField("tagNavigator"),
-      trustNudge: boolField("trustNudge"),
       thresholdBrowsing: intField("thresholdBrowsing", 30),
       thresholdConsidering: intField("thresholdConsidering", 55),
       thresholdHighIntent: intField("thresholdHighIntent", 75),
@@ -307,48 +305,6 @@ const styles = {
     marginBottom: 6,
     color: "#374151",
   },
-  // Trust Nudge preview
-  trustContainer: {
-    background: "#fff",
-    borderRadius: 8,
-    padding: 14,
-    border: "1px solid rgba(0,0,0,0.06)",
-    maxWidth: 380,
-  },
-  trustItem: {
-    padding: "8px 0",
-    borderBottom: "1px solid rgba(0,0,0,0.04)",
-  },
-  trustName: {
-    fontSize: 12,
-    fontWeight: 600,
-    margin: "0 0 4px",
-  },
-  trustMeta: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    fontSize: 12,
-    flexWrap: "wrap" as const,
-  },
-  trustStars: {
-    color: "#f59e0b",
-    letterSpacing: 1,
-  },
-  trustReviews: {
-    color: "#6b7280",
-  },
-  trustBadge: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 4,
-    padding: "1px 8px",
-    fontSize: 11,
-    fontWeight: 500,
-    background: "rgba(16,185,129,0.1)",
-    color: "#059669",
-    borderRadius: 99,
-  },
   // Intent flow
   flowContainer: {
     display: "flex",
@@ -493,35 +449,6 @@ function TagNavigatorPreview() {
   );
 }
 
-function TrustNudgePreview() {
-  return (
-    <div style={styles.previewContainer}>
-      <span style={styles.previewLabel}>Preview — Cart Page</span>
-      <div style={styles.trustContainer}>
-        {[
-          { name: "Classic Cotton Tee — White", rating: 4.8, reviews: 234, freeReturn: true },
-          { name: "Organic Slim Fit Polo", rating: 4.5, reviews: 89, freeReturn: true },
-        ].map((item, i) => (
-          <div key={i} style={{ ...styles.trustItem, borderBottom: i < 1 ? "1px solid rgba(0,0,0,0.04)" : "none" }}>
-            <p style={styles.trustName}>{item.name}</p>
-            <div style={styles.trustMeta}>
-              <span style={styles.trustStars}>{"★".repeat(Math.round(item.rating))}{"☆".repeat(5 - Math.round(item.rating))}</span>
-              <span style={styles.trustReviews}>{item.reviews} đánh giá</span>
-              {item.freeReturn && (
-                <>
-                  <span style={{ color: "#d1d5db" }}>·</span>
-                  <span style={styles.trustBadge}>↩ Đổi trả miễn phí 30 ngày</span>
-                </>
-              )}
-            </div>
-          </div>
-        ))}
-        <div style={{ position: "absolute", top: 28, right: 32, fontSize: 14, color: "#9ca3af", cursor: "default" }}>✕</div>
-      </div>
-    </div>
-  );
-}
-
 // ── Widget Config ──────────────────────────────────────────────
 
 const WIDGETS = [
@@ -552,15 +479,6 @@ const WIDGETS = [
     color: "#d97706",
     preview: TagNavigatorPreview,
   },
-  {
-    key: "trustNudge" as const,
-    title: "Trust Nudge",
-    desc: "Hiện rating + đổi trả miễn phí khi shopper do dự ở cart page",
-    trigger: "cart_hesitation > 60s trên /cart page",
-    position: "Inline dưới cart items, trên nút Checkout",
-    color: "#059669",
-    preview: TrustNudgePreview,
-  },
 ];
 
 const INTENT_FLOW = [
@@ -581,7 +499,7 @@ const THRESHOLDS = [
 
 // ── Component ──────────────────────────────────────────────────
 
-type WidgetKey = "alternativeNudge" | "comparisonBar" | "tagNavigator" | "trustNudge";
+type WidgetKey = "alternativeNudge" | "comparisonBar" | "tagNavigator";
 type ThresholdKey = "thresholdBrowsing" | "thresholdConsidering" | "thresholdHighIntent" | "thresholdStrongIntent" | "thresholdReadyToBuy";
 
 export default function SmartRecDashboard() {
@@ -594,7 +512,6 @@ export default function SmartRecDashboard() {
     alternativeNudge: settings.alternativeNudge,
     comparisonBar: settings.comparisonBar,
     tagNavigator: settings.tagNavigator,
-    trustNudge: settings.trustNudge,
   });
   const [thresholds, setThresholds] = useState<Record<ThresholdKey, number>>({
     thresholdBrowsing: settings.thresholdBrowsing,
@@ -624,6 +541,7 @@ export default function SmartRecDashboard() {
   }, [enabled, widgets, thresholds, fetcher]);
 
   const activeCount = Object.values(widgets).filter(Boolean).length;
+  const totalWidgets = WIDGETS.length;
 
   return (
     <s-page heading="SmartRec Dashboard">
@@ -654,7 +572,7 @@ export default function SmartRecDashboard() {
               {enabled ? "SmartRec is active" : "SmartRec is paused"}
             </div>
             <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
-              {activeCount}/4 widgets enabled · {stats.totalEvents} events tracked
+              {activeCount}/{totalWidgets} widgets enabled · {stats.totalEvents} events tracked
             </div>
           </div>
           <s-checkbox
@@ -675,7 +593,7 @@ export default function SmartRecDashboard() {
           </div>
           <div style={styles.statCard}>
             <div style={styles.statLabel}>Active Widgets</div>
-            <div style={styles.statValue}>{activeCount}/4</div>
+            <div style={styles.statValue}>{activeCount}/{totalWidgets}</div>
           </div>
           <div style={styles.statCard}>
             <div style={styles.statLabel}>Widget Types</div>

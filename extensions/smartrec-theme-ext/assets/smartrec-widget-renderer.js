@@ -133,25 +133,6 @@
     return document.querySelector('main, #MainContent, #main-content');
   }
 
-  function findCartItemsAnchor() {
-    var block = findBlockAnchor('sr-cart-block');
-    if (block) return block;
-
-    var selectors = [
-      '.cart__items',
-      '.cart-items',
-      '[data-cart-items]',
-      '.cart__contents',
-      'form[action="/cart"] tbody',
-      'form[action="/cart"] .cart-item:last-child'
-    ];
-    for (var i = 0; i < selectors.length; i++) {
-      var el = document.querySelector(selectors[i]);
-      if (el) return el;
-    }
-    return null;
-  }
-
   // ── Shared CSS ──────────────────────────────────────────────────
 
   var BASE_CSS = [
@@ -344,7 +325,7 @@
     var thumbs = createElement('div', 'sr-alt-trigger__thumbs');
     for (var t = 0; t < products.length; t++) {
       var thumb = createElement('img', 'sr-alt-trigger__thumb', {
-        'src': products[t].image_url || '', 'alt': '', 'width': '40', 'height': '40', 'loading': 'lazy'
+        'src': (products[t].image_url || products[t].image) || '', 'alt': '', 'width': '40', 'height': '40', 'loading': 'lazy'
       });
       thumbs.appendChild(thumb);
     }
@@ -387,7 +368,7 @@
       var item = createElement('div', 'sr-alt-popup__item');
 
       var img = createElement('img', 'sr-alt-popup__img', {
-        'src': product.image_url || '', 'alt': product.title || '',
+        'src': (product.image_url || product.image) || '', 'alt': product.title || '',
         'loading': 'lazy', 'width': '100', 'height': '100'
       });
 
@@ -510,7 +491,7 @@
     var bar = createElement('div', 'sr-widget sr-compare-bar');
 
     var thumb = createElement('img', 'sr-compare-bar__thumb', {
-      'src': data.productA.image_url || '',
+      'src': (data.productA.image_url || data.productA.image) || '',
       'alt': data.productA.title || '',
       'width': '40', 'height': '40', 'loading': 'lazy'
     });
@@ -559,7 +540,7 @@
       var card = createElement('div', 'sr-compare-panel__product');
 
       var pImg = createElement('img', 'sr-compare-panel__img', {
-        'src': product.image_url || '', 'alt': product.title || '', 'loading': 'lazy'
+        'src': (product.image_url || product.image) || '', 'alt': product.title || '', 'loading': 'lazy'
       });
       var pName = createElement('p', 'sr-compare-panel__name');
       pName.textContent = product.title || '';
@@ -682,95 +663,6 @@
     });
   }
 
-  // ================================================================
-  // COMPONENT 4: Trust Nudge
-  // UC-04: Cart Doubt — inline below cart items
-  // ================================================================
-
-  var TRUST_CSS = [
-    '.sr-trust-nudge{position:relative;padding:12px 16px;margin:12px 0;border:1px solid rgba(0,0,0,0.06);border-radius:var(--buttons-radius,4px);}',
-    '.sr-trust-nudge__item{padding:8px 0;}',
-    '.sr-trust-nudge__item+.sr-trust-nudge__item{border-top:1px solid rgba(0,0,0,0.06);}',
-    '.sr-trust-nudge__product-name{font-size:13px;font-weight:600;margin:0 0 4px;padding-right:28px;}',
-    '.sr-trust-nudge__meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;}',
-    '.sr-trust-nudge__stars{color:#f59e0b;letter-spacing:1px;}',
-    '.sr-trust-nudge__reviews{opacity:0.7;}',
-    '.sr-trust-nudge__separator{opacity:0.3;}',
-    '.sr-trust-nudge__badge{',
-      'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;',
-      'font-size:12px;font-weight:500;background:rgba(16,185,129,0.1);color:#059669;border-radius:99px;',
-    '}',
-    '@media(max-width:749px){',
-      '.sr-trust-nudge__product-name{font-size:12px;}',
-      '.sr-trust-nudge__meta{font-size:12px;}',
-    '}'
-  ].join('');
-
-  function renderTrustNudge(data) {
-    if (!data || !data.items || !data.items.length) return;
-    if (document.querySelector('.sr-trust-nudge')) return;
-
-    var anchor = findCartItemsAnchor();
-    if (!anchor) return;
-
-    injectStyles('sr-trust-css', TRUST_CSS);
-
-    var container = createElement('div', 'sr-widget sr-trust-nudge', {
-      'role': 'complementary',
-      'aria-label': 'Thông tin sản phẩm'
-    });
-
-    container.appendChild(createDismissButton('trust_nudge', container));
-
-    var items = data.items.slice(0, 5);
-    for (var i = 0; i < items.length; i++) {
-      var item = items[i];
-      var row = createElement('div', 'sr-trust-nudge__item');
-
-      var itemName = createElement('p', 'sr-trust-nudge__product-name');
-      itemName.textContent = item.title || '';
-
-      var meta = createElement('div', 'sr-trust-nudge__meta');
-
-      if (item.rating) {
-        var stars = createElement('span', 'sr-trust-nudge__stars', {
-          'aria-label': item.rating + ' trên 5 sao',
-          'role': 'img'
-        });
-        stars.textContent = renderStars(item.rating);
-        meta.appendChild(stars);
-      }
-
-      if (item.review_count > 0) {
-        var reviews = createElement('span', 'sr-trust-nudge__reviews');
-        reviews.textContent = item.review_count + ' đánh giá';
-        meta.appendChild(reviews);
-      }
-
-      if (item.has_free_return) {
-        if (meta.children.length > 0) {
-          var sep = createElement('span', 'sr-trust-nudge__separator');
-          sep.textContent = '·';
-          meta.appendChild(sep);
-        }
-        var badge = createElement('span', 'sr-trust-nudge__badge');
-        badge.textContent = '↩ Đổi trả miễn phí 30 ngày';
-        meta.appendChild(badge);
-      }
-
-      row.appendChild(itemName);
-      row.appendChild(meta);
-      container.appendChild(row);
-    }
-
-    if (anchor.id === 'sr-cart-block') {
-      anchor.appendChild(container);
-    } else {
-      anchor.insertAdjacentElement('afterend', container);
-    }
-    fadeIn(container, 0);
-  }
-
   // ── Action Dispatcher ───────────────────────────────────────────
 
   window.SmartRecRender = function renderAction(action) {
@@ -784,8 +676,6 @@
         return renderComparisonBar(action.data);
       case 'tag_navigator':
         return renderTagNavigator(action.data);
-      case 'trust_nudge':
-        return renderTrustNudge(action.data);
     }
   };
 
