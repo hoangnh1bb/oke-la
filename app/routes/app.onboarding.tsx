@@ -1,19 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { useFetcher, useLoaderData, useNavigate } from "react-router";
 import { authenticate } from "~/shopify.server";
 import { WIDGETS, type WidgetId, type WizardStep } from "~/types/onboarding";
 import type { DemoProduct } from "~/routes/api.onboarding";
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  return { shop: session.shop };
-};
-
 type OnboardingApiData = {
   shop: string;
   storeUrl: string;
   demoProducts: DemoProduct[];
+};
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  return { shop: session.shop };
 };
 
 function StepIndicator({ current }: { current: WizardStep }) {
@@ -152,9 +152,98 @@ function Step1({
   );
 }
 
+type MockProduct = { id: string; title: string; price: string; image: string | null };
+
+const fallbackProducts: MockProduct[] = [
+  { id: "1", title: "Demo Product 1", price: "29.99", image: null },
+  { id: "2", title: "Demo Product 2", price: "39.99", image: null },
+];
+
+function MockAlternativeNudge({ products }: { products: MockProduct[] }) {
+  const p = products.length ? products : fallbackProducts;
+  return (
+    <div className="sr-mock-widget">
+      <div className="sr-mock-header">
+        <span>Không chắc chắn? Khách hàng tương tự cũng xem:</span>
+      </div>
+      <div className="sr-mock-product-list">
+        {p.slice(0, 2).map((prod) => (
+          <div key={prod.id} className="sr-mock-card">
+            {prod.image ? (
+              <img src={prod.image} alt="" width={80} height={80} />
+            ) : (
+              <div className="sr-mock-img" />
+            )}
+            <div>
+              <div className="sr-mock-title">{prod.title}</div>
+              <div className="sr-mock-price">${prod.price}</div>
+              <button type="button" className="sr-mock-btn">
+                Xem
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <span className="sr-mock-badge">✨ Preview</span>
+    </div>
+  );
+}
+
+function MockComparisonBar({ products }: { products: MockProduct[] }) {
+  const p = products.length ? products[0] : fallbackProducts[0];
+  return (
+    <div className="sr-mock-widget sr-mock-bar">
+      <span>Bạn cũng đang xem:</span>
+      {p?.image && <img src={p.image} alt="" width={40} height={40} />}
+      <span>{p?.title ?? "Product"}</span>
+      <span className="sr-mock-price">${p?.price ?? "0"}</span>
+      <button type="button" className="sr-mock-btn">
+        So sánh
+      </button>
+      <span className="sr-mock-badge">✨ Preview</span>
+    </div>
+  );
+}
+
+function MockTagNavigator() {
+  return (
+    <div className="sr-mock-widget sr-mock-tags">
+      <div className="sr-mock-header">Vẫn đang tìm? Thử lọc theo:</div>
+      <div className="sr-mock-tag-list">
+        <button type="button" className="sr-mock-tag">
+          áo thun
+        </button>
+        <button type="button" className="sr-mock-tag">
+          size M
+        </button>
+        <button type="button" className="sr-mock-tag">
+          màu đen
+        </button>
+      </div>
+      <span className="sr-mock-badge">✨ Preview</span>
+    </div>
+  );
+}
+
+function MockTrustNudge({ products }: { products: MockProduct[] }) {
+  const p = products.length ? products[0] : fallbackProducts[0];
+  return (
+    <div className="sr-mock-widget sr-mock-trust">
+      <div className="sr-mock-trust-row">
+        <span className="sr-mock-stars">★★★★★</span>
+        <span>{p?.title ?? "Sản phẩm"} — 4.8★ từ 234 đánh giá</span>
+      </div>
+      <div className="sr-mock-trust-row">
+        <span>↩</span>
+        <span>Đổi trả miễn phí trong 30 ngày</span>
+      </div>
+      <span className="sr-mock-badge">✨ Preview</span>
+    </div>
+  );
+}
+
 function Step2({
   widgets,
-  shop,
   onBack,
   onNext,
 }: {
@@ -164,43 +253,51 @@ function Step2({
   onNext: () => void;
 }) {
   const fetcher = useFetcher<OnboardingApiData>();
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [iframeReady, setIframeReady] = useState(false);
   const [activePreview, setActivePreview] = useState<WidgetId | null>(null);
-  const [iframeError, setIframeError] = useState(false);
 
   useEffect(() => {
     fetcher.load("/api/onboarding");
   }, []);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!iframeReady) setIframeError(true);
-    }, 15000);
-    return () => clearTimeout(timer);
-  }, [iframeReady]);
-
-  const storeUrl = fetcher.data?.storeUrl ?? `https://${shop}`;
-  const demoProducts = fetcher.data?.demoProducts ?? [];
-
-  const handleIframeLoad = () => {
-    setTimeout(() => setIframeReady(true), 800);
-  };
-
-  const sendPreview = (widgetId: WidgetId) => {
-    if (!iframeRef.current || !iframeReady) return;
-    setActivePreview(widgetId);
-    iframeRef.current.contentWindow?.postMessage(
-      {
-        type: "smartrec_preview_signal",
-        widget: widgetId,
-        products: demoProducts,
-      },
-      storeUrl
-    );
-  };
-
+  const demoProducts: MockProduct[] =
+    (fetcher.data?.demoProducts ?? []).map((p) => ({
+      id: p.id,
+      title: p.title,
+      price: p.price,
+      image: p.image,
+    }));
   const isLoading = fetcher.state === "loading";
+
+  const renderMockWidget = () => {
+    if (!activePreview) {
+      return (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100%",
+            color: "#6d7175",
+            fontSize: 14,
+          }}
+        >
+          Chọn &quot;Xem thử&quot; để xem widget với sản phẩm từ store của bạn
+        </div>
+      );
+    }
+    switch (activePreview) {
+      case "alternative_nudge":
+        return <MockAlternativeNudge products={demoProducts} />;
+      case "comparison_bar":
+        return <MockComparisonBar products={demoProducts} />;
+      case "tag_navigator":
+        return <MockTagNavigator />;
+      case "trust_nudge":
+        return <MockTrustNudge products={demoProducts} />;
+      default:
+        return null;
+    }
+  };
 
   return (
     <div
@@ -220,10 +317,10 @@ function Step2({
         }}
       >
         <s-stack direction="block" gap="base">
-          <s-heading>Bước 2/3 — Xem thử trên store</s-heading>
+          <s-heading>Bước 2/3 — Xem thử widget</s-heading>
           <s-paragraph>
-            Click &quot;Xem thử&quot; để preview từng widget trực tiếp trên store
-            của bạn.
+            Click &quot;Xem thử&quot; để xem mẫu từng widget với sản phẩm thật từ
+            store của bạn.
           </s-paragraph>
 
           {isLoading && <s-spinner />}
@@ -241,8 +338,8 @@ function Step2({
                 </s-text>
                 <s-paragraph>{w.description}</s-paragraph>
                 <s-button
-                  onClick={() => sendPreview(w.id as WidgetId)}
-                  {...(!iframeReady || isLoading ? { disabled: true } : {})}
+                  onClick={() => setActivePreview(w.id as WidgetId)}
+                  {...(isLoading ? { disabled: true } : {})}
                 >
                   {activePreview === w.id ? "✓ Đang hiển thị" : "Xem thử"}
                 </s-button>
@@ -251,15 +348,10 @@ function Step2({
           ))}
 
           {WIDGETS.filter((w) => !widgets[w.id as WidgetId]).map((w) => (
-            <s-box
-              key={w.id}
-              padding="base"
-              background="subdued"
-              borderRadius="base"
-            >
-            <s-text tone="neutral">
-              {w.icon} {w.name} — Đã tắt
-            </s-text>
+            <s-box key={w.id} padding="base" borderRadius="base">
+              <s-text tone="neutral">
+                {w.icon} {w.name} — Đã tắt
+              </s-text>
             </s-box>
           ))}
 
@@ -272,66 +364,33 @@ function Step2({
         </s-stack>
       </div>
 
-      <div style={{ flex: 1, position: "relative" }}>
-        {iframeError && !iframeReady && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 16,
-              padding: 24,
-              background: "#f6f6f7",
-              zIndex: 2,
-            }}
-          >
-            <s-paragraph>Không thể tải store preview.</s-paragraph>
-            <s-text tone="neutral">
-              Store của bạn có thể đang bật password. Bạn vẫn có thể tiếp tục
-              setup.
-            </s-text>
-            <s-button onClick={onNext} variant="primary">
-              Bỏ qua và Tiếp tục →
-            </s-button>
-          </div>
-        )}
-        {!iframeReady && !iframeError && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 12,
-              background: "#f6f6f7",
-              zIndex: 1,
-            }}
-          >
-            <s-spinner />
-            <s-text>Đang tải store của bạn...</s-text>
-            <s-text tone="neutral">
-              (Lần đầu có thể mất 5–10 giây)
-            </s-text>
-          </div>
-        )}
-        <iframe
-          ref={iframeRef}
-          src={storeUrl}
-          style={{
-            width: "100%",
-            height: "100%",
-            border: "none",
-            opacity: iframeReady ? 1 : 0,
-          }}
-          title="Store Preview"
-          onLoad={handleIframeLoad}
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-        />
+      <div
+        style={{
+          flex: 1,
+          padding: 24,
+          background: "#f9fafb",
+          overflowY: "auto",
+        }}
+      >
+        <style>{`
+          .sr-mock-widget{background:#fff;border:1px solid #e1e3e5;border-radius:8px;padding:16px;font-family:inherit;max-width:600px;position:relative;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+          .sr-mock-header{font-weight:500;margin-bottom:12px}
+          .sr-mock-product-list{display:flex;gap:12px;flex-wrap:wrap}
+          .sr-mock-card{display:flex;gap:8px;border:1px solid #f0f0f0;border-radius:6px;padding:8px;background:#fff}
+          .sr-mock-img{width:80px;height:80px;background:#f0f0f0;border-radius:4px}
+          .sr-mock-title{font-size:13px;font-weight:500}
+          .sr-mock-price{font-size:13px;color:#333}
+          .sr-mock-btn{margin-top:4px;padding:4px 12px;background:#000;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px}
+          .sr-mock-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+          .sr-mock-tags{max-width:320px}
+          .sr-mock-tag-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+          .sr-mock-tag{padding:6px 12px;border:1px solid #000;border-radius:20px;background:none;cursor:pointer;font-size:13px}
+          .sr-mock-trust{background:#f6f6f7}
+          .sr-mock-trust-row{display:flex;gap:8px;align-items:center;margin-bottom:6px;font-size:14px}
+          .sr-mock-stars{color:#f4b400}
+          .sr-mock-badge{position:absolute;top:8px;right:12px;font-size:10px;background:#5c6ac4;color:#fff;padding:2px 6px;border-radius:4px}
+        `}</style>
+        {renderMockWidget()}
       </div>
     </div>
   );
