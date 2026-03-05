@@ -389,6 +389,29 @@
     if (widget) widget.remove();
   }
 
+  // ── Cart product IDs extraction ─────────────────────
+
+  function getCartProductIds() {
+    try {
+      // Shopify exposes cart items via global Shopify object or meta tags
+      if (window.Shopify && window.Shopify.cart && window.Shopify.cart.items) {
+        return window.Shopify.cart.items.map(function (item) {
+          return "gid://shopify/Product/" + item.product_id;
+        });
+      }
+      // Fallback: parse cart form hidden inputs
+      var inputs = document.querySelectorAll("[data-product-id]");
+      var ids = [];
+      inputs.forEach(function (el) {
+        var id = el.dataset.productId;
+        if (id) ids.push("gid://shopify/Product/" + id);
+      });
+      return ids;
+    } catch (e) {
+      return [];
+    }
+  }
+
   // ── Server communication via App Proxy ───────────────
 
   var lastCallTime = 0;
@@ -420,6 +443,7 @@
             image: config.productImage,
           }
         : null,
+      cartProductIds: getCartProductIds(),
       backNavCount: session.backNavCount || 0,
     };
 
