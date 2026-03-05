@@ -1,0 +1,305 @@
+<div id="sr-product-block" class="sr-block-container" {{ block.shopify_attributes }}>
+  <script>
+    window.SmartRecMeta = window.SmartRecMeta || {};
+    window.SmartRecMeta.shopDomain = {{ shop.permanent_domain | json }};
+    window.SmartRecMeta.appProxy = {{ shop.permanent_domain | prepend: "https://" | append: "/apps/smartrec" | json }};
+    window.SmartRecMeta.pageType = {{ request.page_type | json }};
+    window.SmartRecMeta.productId = {{ product.id | default: "null" }};
+    window.SmartRecMeta.productHandle = {{ product.handle | default: "" | json }};
+    window.SmartRecMeta.productType = {{ product.type | default: "" | json }};
+    window.SmartRecMeta.productTags = {{ product.tags | json }};
+    window.SmartRecMeta.productPrice = {{ product.price | default: 0 }};
+    window.SmartRecMeta.cartToken = {{ cart.token | default: "" | json }};
+    window.SmartRecMeta.cartItemCount = {{ cart.item_count | default: 0 }};
+    window.SmartRecMeta.customerId = {{ customer.id | default: "null" }};
+    window.SmartRecMeta.templateName = {{ template.name | default: "" | json }};
+    window.SmartRecMeta.enableTracking = true;
+    window.SmartRecMeta.enableWidgets = true;
+    window.SmartRecMeta.blockAnchor = "sr-product-block";
+  </script>
+
+  <style>
+    .sr-ph { font-family: var(--font-body-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif); color: var(--color-foreground, inherit); box-sizing: border-box; line-height: 1.5; }
+    .sr-ph * { box-sizing: border-box; }
+
+    /* Trigger bar */
+    .sr-ph-trigger {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px; margin: 16px 0;
+      background: var(--color-background, #fff);
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: var(--buttons-radius, 4px);
+      cursor: pointer; transition: border-color 150ms, box-shadow 150ms;
+    }
+    .sr-ph-trigger:hover { border-color: rgba(0,0,0,0.2); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .sr-ph-thumbs { display: flex; gap: 6px; }
+    .sr-ph-thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: #f3f4f6; }
+    .sr-ph-trigger-text { flex: 1; min-width: 0; }
+    .sr-ph-trigger-label { font-size: 13px; font-weight: 600; margin: 0 0 1px; }
+    .sr-ph-trigger-hint { font-size: 12px; margin: 0; opacity: 0.6; }
+    .sr-ph-arrow { font-size: 18px; opacity: 0.4; flex-shrink: 0; }
+
+    /* Popup overlay */
+    .sr-ph-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999;
+      background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center;
+      padding: 16px; opacity: 0; transition: opacity 300ms ease;
+    }
+    .sr-ph-overlay.open { display: flex; opacity: 1; }
+    .sr-ph-popup {
+      position: relative; width: 100%; max-width: 420px; max-height: 85vh; overflow-y: auto;
+      padding: 24px; border-radius: 12px;
+      background: #ffffff;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    .sr-ph-popup-title { font-size: 16px; font-weight: 600; margin: 0 0 4px; padding-right: 36px; }
+    .sr-ph-popup-sub { font-size: 13px; margin: 0 0 16px; opacity: 0.6; }
+    .sr-ph-close {
+      position: absolute; top: 12px; right: 12px; width: 32px; height: 32px;
+      border: none; background: transparent; font-size: 18px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; opacity: 0.5; transition: opacity 150ms, background 150ms;
+      color: var(--color-foreground, inherit);
+    }
+    .sr-ph-close:hover { opacity: 1; background: rgba(0,0,0,0.05); }
+
+    /* Product items */
+    .sr-ph-item { display: flex; gap: 14px; padding: 14px 0; }
+    .sr-ph-item + .sr-ph-item { border-top: 1px solid rgba(0,0,0,0.06); }
+    .sr-ph-img { width: 100px; height: 100px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: #f3f4f6; }
+    .sr-ph-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+    .sr-ph-name { font-size: 15px; font-weight: 500; margin: 0 0 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .sr-ph-price { font-size: 16px; font-weight: 700; margin: 0 0 10px; }
+    .sr-ph-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .sr-ph-atc {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 8px 16px; font-size: 13px; font-weight: 600;
+      background: var(--color-foreground, #222); color: var(--color-background, #fff);
+      border: 1px solid var(--color-foreground, #222);
+      border-radius: var(--buttons-radius, 4px);
+      cursor: pointer; transition: opacity 150ms; min-width: 120px;
+    }
+    .sr-ph-atc:hover { opacity: 0.85; }
+    .sr-ph-view {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 8px 16px; font-size: 13px; font-weight: 500;
+      border: 1px solid rgba(0,0,0,0.15); color: var(--color-foreground, inherit);
+      background: transparent; border-radius: var(--buttons-radius, 4px);
+      text-decoration: none; transition: background 150ms;
+    }
+    .sr-ph-view:hover { background: rgba(0,0,0,0.04); }
+    .sr-ph-atc-ok { background: #059669 !important; border-color: #059669 !important; color: #fff !important; }
+
+    @media (max-width: 749px) {
+      .sr-ph-popup { padding: 20px; max-width: 100%; border-radius: 12px 12px 0 0; align-self: flex-end; }
+      .sr-ph-img { width: 80px; height: 80px; }
+      .sr-ph-name { font-size: 14px; }
+      .sr-ph-actions { flex-direction: column; }
+      .sr-ph-atc, .sr-ph-view { width: 100%; justify-content: center; }
+    }
+  </style>
+
+  {%- assign recommendations = product.collections.first.products | default: collections.all.products -%}
+  {%- assign recs = "" -%}
+  {%- assign count = 0 -%}
+
+  {%- comment -%} Collect up to 2 alternative products {%- endcomment -%}
+  {%- for rec in recommendations limit: 10 -%}
+    {%- if rec.id != product.id and count < 2 -%}
+      {%- assign count = count | plus: 1 -%}
+
+      {%- comment -%} Store product data for trigger thumbnails {%- endcomment -%}
+      {%- if count == 1 -%}{%- assign rec1 = rec -%}{%- endif -%}
+      {%- if count == 2 -%}{%- assign rec2 = rec -%}{%- endif -%}
+    {%- endif -%}
+  {%- endfor -%}
+
+  {%- if count > 0 -%}
+    {%- comment -%} Trigger button {%- endcomment -%}
+    <div class="sr-ph sr-ph-trigger" onclick="var o=document.getElementById('sr-ph-overlay');o.style.display='flex';setTimeout(function(){o.classList.add('open')},10)">
+      <div class="sr-ph-thumbs">
+        {%- if rec1 and rec1.featured_image -%}
+          <img class="sr-ph-thumb" src="{{ rec1.featured_image | image_url: width: 80 }}" alt="" width="40" height="40" loading="lazy">
+        {%- endif -%}
+        {%- if rec2 and rec2.featured_image -%}
+          <img class="sr-ph-thumb" src="{{ rec2.featured_image | image_url: width: 80 }}" alt="" width="40" height="40" loading="lazy">
+        {%- endif -%}
+      </div>
+      <div class="sr-ph-trigger-text">
+        <p class="sr-ph-trigger-label">Product Recommendations</p>
+        <p class="sr-ph-trigger-hint">{{ count }} sản phẩm tương tự — bấm để xem</p>
+      </div>
+      <span class="sr-ph-arrow">›</span>
+    </div>
+
+    {%- comment -%} Popup overlay {%- endcomment -%}
+    <div class="sr-ph sr-ph-overlay" id="sr-ph-overlay" onclick="if(event.target===this)srClosePopup()">
+      <div class="sr-ph-popup">
+        <p class="sr-ph-popup-title">Product Recommendations</p>
+        <p class="sr-ph-popup-sub">Khách hàng tương tự cũng xem những sản phẩm này.</p>
+        <button class="sr-ph-close" onclick="srClosePopup()" aria-label="Đóng">✕</button>
+
+        {%- assign count2 = 0 -%}
+        {%- for rec in recommendations limit: 10 -%}
+          {%- if rec.id != product.id and count2 < 2 -%}
+            <div class="sr-ph-item">
+              {%- if rec.featured_image -%}
+                <img class="sr-ph-img" src="{{ rec.featured_image | image_url: width: 200 }}" alt="{{ rec.title | escape }}" width="100" height="100" loading="lazy">
+              {%- else -%}
+                <div class="sr-ph-img" style="display:flex;align-items:center;justify-content:center;font-size:28px;">📦</div>
+              {%- endif -%}
+              <div class="sr-ph-info">
+                <p class="sr-ph-name">{{ rec.title }}</p>
+                <p class="sr-ph-price">{{ rec.price | money }}</p>
+                <div class="sr-ph-actions">
+                  <button
+                    class="sr-ph-atc"
+                    type="button"
+                    onclick="srAddToCart({{ rec.selected_or_first_available_variant.id }}, this)"
+                  >
+                    Thêm vào giỏ
+                  </button>
+                  <a class="sr-ph-view" href="{{ rec.url }}">Xem chi tiết</a>
+                </div>
+              </div>
+            </div>
+            {%- assign count2 = count2 | plus: 1 -%}
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+    </div>
+
+    <script>
+      function srClosePopup() {
+        var o = document.getElementById('sr-ph-overlay');
+        o.classList.remove('open');
+        setTimeout(function() { o.style.display = 'none'; }, 300);
+      }
+      function srAddToCart(variantId, btn) {
+        if (!variantId) { btn.textContent = 'Không có variant'; return; }
+        btn.textContent = 'Đang thêm...';
+        btn.disabled = true;
+
+        fetch('/cart/add.js', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            items: [{ id: variantId, quantity: 1 }],
+            sections: srGetCartSections()
+          })
+        })
+        .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
+        .then(function(result) {
+          if (result.ok) {
+            btn.textContent = '✓ Đã thêm';
+            btn.classList.add('sr-ph-atc-ok');
+
+            srUpdateCartUI(result.data);
+            srClosePopup();
+
+            setTimeout(function() {
+              btn.textContent = 'Thêm vào giỏ';
+              btn.classList.remove('sr-ph-atc-ok');
+              btn.disabled = false;
+            }, 2000);
+          } else {
+            btn.textContent = result.data.description || 'Lỗi — thử lại';
+            btn.disabled = false;
+          }
+        })
+        .catch(function() {
+          btn.textContent = 'Lỗi — thử lại';
+          btn.disabled = false;
+        });
+      }
+
+      function srGetCartSections() {
+        var sections = [];
+        if (document.querySelector('cart-notification')) sections.push('cart-notification-product', 'cart-notification-button', 'cart-icon-bubble');
+        if (document.querySelector('cart-drawer')) sections.push('cart-drawer', 'cart-icon-bubble');
+        if (sections.length === 0) sections.push('cart-icon-bubble');
+        return sections.join(',');
+      }
+
+      function srUpdateCartUI(data) {
+        var sections = data.sections || {};
+
+        Object.keys(sections).forEach(function(sectionId) {
+          var html = sections[sectionId];
+          if (!html) return;
+          var tmp = document.createElement('div');
+          tmp.innerHTML = html;
+
+          var sectionEl = document.getElementById('shopify-section-' + sectionId);
+          if (sectionEl) {
+            sectionEl.innerHTML = tmp.querySelector('.shopify-section')
+              ? tmp.querySelector('.shopify-section').innerHTML
+              : html;
+          }
+        });
+
+        var bubble = document.querySelector('cart-icon-bubble, .cart-count-bubble, [data-cart-count]');
+        if (bubble) {
+          fetch('/cart.js').then(function(r) { return r.json(); }).then(function(cart) {
+            var countEls = document.querySelectorAll('.cart-count-bubble span, [data-cart-count]');
+            countEls.forEach(function(el) { el.textContent = cart.item_count; });
+            if (bubble.closest('.header__icon')) bubble.closest('.header__icon').setAttribute('aria-label', cart.item_count + ' items');
+          });
+        }
+
+        var cartNotification = document.querySelector('cart-notification');
+        if (cartNotification && typeof cartNotification.renderContents === 'function') {
+          cartNotification.renderContents(data);
+        } else if (cartNotification) {
+          cartNotification.classList.add('animate', 'active');
+          cartNotification.removeAttribute('hidden');
+          var focusEl = cartNotification.querySelector('[role="status"]');
+          if (focusEl) focusEl.setAttribute('aria-live', 'polite');
+        }
+
+        var cartDrawer = document.querySelector('cart-drawer');
+        if (cartDrawer) {
+          if (typeof cartDrawer.renderContents === 'function') {
+            cartDrawer.renderContents(data);
+          } else {
+            cartDrawer.classList.add('active');
+            var details = cartDrawer.querySelector('details');
+            if (details) details.setAttribute('open', '');
+          }
+        }
+
+        document.dispatchEvent(new CustomEvent('cart:updated'));
+      }
+    </script>
+  {%- else -%}
+    <div class="sr-ph" style="padding:12px 16px;margin:16px 0;border:1px solid rgba(0,0,0,0.06);border-radius:var(--buttons-radius,4px);font-size:13px;color:#6b7280;">
+      SmartRec widget sẽ hiện gợi ý sản phẩm khi có dữ liệu.
+    </div>
+  {%- endif -%}
+
+  {{ 'smartrec-signal-collector.js' | asset_url | script_tag }}
+  {{ 'smartrec-widget-renderer.js' | asset_url | script_tag }}
+</div>
+
+{% schema %}
+{
+  "name": "SmartRec — Product Widget",
+  "target": "section",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "enable_alt_nudge",
+      "label": "Enable Alternative Nudge",
+      "default": true,
+      "info": "Gợi ý sản phẩm thay thế khi khách hàng đang phân vân"
+    },
+    {
+      "type": "checkbox",
+      "id": "enable_comparison",
+      "label": "Enable Comparison Bar",
+      "default": true,
+      "info": "So sánh 2 sản phẩm khi khách xem qua lại"
+    }
+  ]
+}
+{% endschema %}

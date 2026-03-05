@@ -1,0 +1,7 @@
+api_version = "2025-10"
+
+[[extensions]]
+uid = "8eee2121-9204-80c5-4c69-cdf726a074cfe77ae366"
+type = "theme"
+name = "SmartRec Tracker"
+handle = "smartrec-theme-ext"

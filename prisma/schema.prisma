@@ -92,52 +92,50 @@ model OrderAttribution {
 
 // SmartRec — Merchant settings per store (pluggable thresholds)
 model SmartRecSettings {
-  id                    Int      @id @default(autoincrement())
+  id                    String   @id @default(cuid())
   shop                  String   @unique
   enabled               Boolean  @default(true)
-  // UC-01: Hesitating Shopper thresholds
-  ucHesitationEnabled   Boolean  @default(true)
+  alternativeNudge      Boolean  @default(true)
+  comparisonBar         Boolean  @default(true)
+  tagNavigator          Boolean  @default(true)
+  trustNudge            Boolean  @default(true)
+  thresholdBrowsing     Int      @default(30)
+  thresholdConsidering  Int      @default(55)
+  thresholdHighIntent   Int      @default(75)
+  thresholdStrongIntent Int      @default(89)
+  thresholdReadyToBuy   Int      @default(90)
   ucHesitationMin       Int      @default(56)
   ucHesitationMax       Int      @default(89)
-  // UC-02: Comparison Shopper
-  ucCompareEnabled      Boolean  @default(true)
-  // UC-03: Lost Shopper
-  ucLostEnabled         Boolean  @default(true)
   ucLostBackNavMin      Int      @default(3)
-  // UC-04: Cart Doubt
-  ucCartEnabled         Boolean  @default(true)
   ucCartHesitationSec   Int      @default(60)
-  // General
   maxAlternatives       Int      @default(2)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }
 
-// SmartRec — Substitution patterns from order history (view A → buy B)
 model SubstitutionCache {
-  id            Int      @id @default(autoincrement())
-  shop          String
-  sourceProductId String  // Product that was viewed
-  targetProductId String  // Product that was actually purchased
-  frequency     Int      @default(1) // How many times this pattern occurred
-  updatedAt     DateTime @updatedAt
+  id              Int      @id @default(autoincrement())
+  shop            String
+  sourceProductId String
+  targetProductId String
+  frequency       Int      @default(1)
+  updatedAt       DateTime @updatedAt
 
   @@unique([shop, sourceProductId, targetProductId])
   @@index([shop, sourceProductId])
 }
 
-// SmartRec — Analytics events (impressions, clicks, dismissals)
-model AnalyticsEvent {
-  id          Int      @id @default(autoincrement())
-  shop        String
-  sessionId   String
-  eventType   String   // "impression" | "click" | "dismiss"
-  widgetType  String   // "alternative_nudge" | "comparison_bar" | "tag_navigator" | "trust_nudge"
-  productId   String?
+model SmartRecEvent {
+  id        String   @id @default(cuid())
+  shop      String
+  eventType String
+  widgetType String?
+  productId  String?
+  sessionId  String?
   intentScore Int?
-  metadata    String?  // JSON string for extra data
-  createdAt   DateTime @default(now())
+  metadata   String?
+  createdAt  DateTime @default(now())
 
   @@index([shop, createdAt])
-  @@index([widgetType, eventType])
+  @@index([shop, widgetType])
 }

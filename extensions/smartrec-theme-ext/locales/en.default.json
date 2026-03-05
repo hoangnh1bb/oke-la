@@ -1,0 +1,10 @@
+{
+  "name": "SmartRec",
+  "settings": {
+    "enable_tracking": "Enable behavior tracking",
+    "enable_widgets": "Enable recommendation widgets",
+    "enable_alt_nudge": "Enable Alternative Nudge",
+    "enable_comparison": "Enable Comparison Bar",
+    "enable_trust_nudge": "Enable Trust Nudge"
+  }
+}
