@@ -32,3 +32,55 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+// SmartRec — Merchant settings per store (pluggable thresholds)
+model SmartRecSettings {
+  id                    Int      @id @default(autoincrement())
+  shop                  String   @unique
+  enabled               Boolean  @default(true)
+  // UC-01: Hesitating Shopper thresholds
+  ucHesitationEnabled   Boolean  @default(true)
+  ucHesitationMin       Int      @default(56)
+  ucHesitationMax       Int      @default(89)
+  // UC-02: Comparison Shopper
+  ucCompareEnabled      Boolean  @default(true)
+  // UC-03: Lost Shopper
+  ucLostEnabled         Boolean  @default(true)
+  ucLostBackNavMin      Int      @default(3)
+  // UC-04: Cart Doubt
+  ucCartEnabled         Boolean  @default(true)
+  ucCartHesitationSec   Int      @default(60)
+  // General
+  maxAlternatives       Int      @default(2)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+// SmartRec — Substitution patterns from order history (view A → buy B)
+model SubstitutionCache {
+  id            Int      @id @default(autoincrement())
+  shop          String
+  sourceProductId String  // Product that was viewed
+  targetProductId String  // Product that was actually purchased
+  frequency     Int      @default(1) // How many times this pattern occurred
+  updatedAt     DateTime @updatedAt
+
+  @@unique([shop, sourceProductId, targetProductId])
+  @@index([shop, sourceProductId])
+}
+
+// SmartRec — Analytics events (impressions, clicks, dismissals)
+model AnalyticsEvent {
+  id          Int      @id @default(autoincrement())
+  shop        String
+  sessionId   String
+  eventType   String   // "impression" | "click" | "dismiss"
+  widgetType  String   // "alternative_nudge" | "comparison_bar" | "tag_navigator" | "trust_nudge"
+  productId   String?
+  intentScore Int?
+  metadata    String?  // JSON string for extra data
+  createdAt   DateTime @default(now())
+
+  @@index([shop, createdAt])
+  @@index([widgetType, eventType])
+}
