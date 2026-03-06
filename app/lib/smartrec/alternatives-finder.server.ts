@@ -114,7 +114,7 @@ export async function findAlternativeProducts(
       title: p.title,
       price: p.price,
       image: p.image,
-      url: "",
+      url: p.url || "",
       variant_id: "",
       matchReason: "session_fallback",
     }));

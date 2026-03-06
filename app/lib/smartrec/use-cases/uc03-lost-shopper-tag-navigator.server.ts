@@ -17,6 +17,8 @@ export const uc03LostShopperHandler: UseCaseHandler = {
   async evaluate(payload: SignalPayload, settings: UseCaseSettings): Promise<IntentAction | null> {
     if (payload.backNavCount < settings.ucLostBackNavMin) return null;
     if (!payload.viewedProducts || payload.viewedProducts.length < 3) return null;
+    // Lost shopper = browsing without buying intent — skip if cart has items
+    if (payload.cartProductIds && payload.cartProductIds.length > 0) return null;
 
     const tags = extractCommonTags(payload.viewedProducts, 3);
     if (tags.length === 0) return null;

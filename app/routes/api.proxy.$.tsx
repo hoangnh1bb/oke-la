@@ -37,13 +37,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   try {
     switch (subPath) {
       case "config":
-        return handleGetConfig(shop);
+        return await handleGetConfig(shop);
       case "alternatives":
-        return handleGetAlternatives(url, shop);
+        return await handleGetAlternatives(url, shop);
       default:
         return json({ error: "Not found" }, 404);
     }
-  } catch {
+  } catch (err) {
+    console.error("[SmartRec] Proxy loader error:", err);
     return json({ type: "none" });
   }
 }
@@ -62,13 +63,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const body = await request.json();
     switch (subPath) {
       case "intent":
-        return handlePostIntent(body as SignalPayload);
+        return await handlePostIntent(body as SignalPayload);
       case "track":
-        return handlePostTrack(body as TrackPayload);
+        return await handlePostTrack(body as TrackPayload);
       default:
         return json({ error: "Not found" }, 404);
     }
-  } catch {
+  } catch (err) {
+    console.error("[SmartRec] Proxy action error:", err);
     return json({ type: "none" });
   }
 }
@@ -107,6 +109,7 @@ async function handleGetAlternatives(url: URL, shop: string) {
     title: "",
     price: "",
     image: "",
+    url: "",
   };
 
   const alts = await findAlternativeProducts(shop, currentProduct, [], 2);

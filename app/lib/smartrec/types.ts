@@ -71,11 +71,16 @@ export interface UseCaseHandler {
 // Subset of SmartRecSettings relevant to UC evaluation
 export interface UseCaseSettings {
   enabled: boolean;
+  // Widget toggles
   ucHesitationEnabled: boolean;
-  ucHesitationMin: number;
-  ucHesitationMax: number;
   ucCompareEnabled: boolean;
   ucLostEnabled: boolean;
+  // Score thresholds (from dashboard)
+  thresholdBrowsing: number;    // below this = skip (default 30)
+  thresholdConsidering: number; // UC-01 lower bound (default 55)
+  thresholdStrongIntent: number;// UC-01 upper bound (default 89)
+  thresholdReadyToBuy: number;  // above this = skip (default 90)
+  // UC-specific settings
   ucLostBackNavMin: number;
   maxAlternatives: number;
 }

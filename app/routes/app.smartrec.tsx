@@ -513,12 +513,12 @@ export default function SmartRecDashboard() {
     comparisonBar: settings.comparisonBar,
     tagNavigator: settings.tagNavigator,
   });
-  const [thresholds, setThresholds] = useState<Record<ThresholdKey, number>>({
-    thresholdBrowsing: settings.thresholdBrowsing,
-    thresholdConsidering: settings.thresholdConsidering,
-    thresholdHighIntent: settings.thresholdHighIntent,
-    thresholdStrongIntent: settings.thresholdStrongIntent,
-    thresholdReadyToBuy: settings.thresholdReadyToBuy,
+  const [thresholds, setThresholds] = useState<Record<ThresholdKey, string>>({
+    thresholdBrowsing: String(settings.thresholdBrowsing),
+    thresholdConsidering: String(settings.thresholdConsidering),
+    thresholdHighIntent: String(settings.thresholdHighIntent),
+    thresholdStrongIntent: String(settings.thresholdStrongIntent),
+    thresholdReadyToBuy: String(settings.thresholdReadyToBuy),
   });
   const [expandedWidget, setExpandedWidget] = useState<string | null>(null);
 
@@ -536,7 +536,10 @@ export default function SmartRecDashboard() {
     const formData = new FormData();
     formData.set("enabled", String(enabled));
     Object.entries(widgets).forEach(([k, v]) => formData.set(k, String(v)));
-    Object.entries(thresholds).forEach(([k, v]) => formData.set(k, String(v)));
+    Object.entries(thresholds).forEach(([k, v]) => {
+      const num = parseInt(v, 10);
+      formData.set(k, String(isNaN(num) ? 0 : Math.max(0, Math.min(100, num))));
+    });
     fetcher.submit(formData, { method: "POST" });
   }, [enabled, widgets, thresholds, fetcher]);
 
@@ -702,10 +705,12 @@ export default function SmartRecDashboard() {
                 max="100"
                 value={thresholds[t.key]}
                 onChange={(e) => {
+                  setThresholds((prev) => ({ ...prev, [t.key]: e.target.value }));
+                }}
+                onBlur={(e) => {
                   const num = parseInt(e.target.value, 10);
-                  if (!isNaN(num) && num >= 0 && num <= 100) {
-                    setThresholds((prev) => ({ ...prev, [t.key]: num }));
-                  }
+                  const clamped = isNaN(num) ? 0 : Math.max(0, Math.min(100, num));
+                  setThresholds((prev) => ({ ...prev, [t.key]: String(clamped) }));
                 }}
                 disabled={!enabled}
                 style={styles.thresholdInput}

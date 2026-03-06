@@ -13,10 +13,12 @@ const NONE_ACTION: IntentAction = { type: "none" };
 const DEFAULT_SETTINGS: UseCaseSettings = {
   enabled: true,
   ucHesitationEnabled: true,
-  ucHesitationMin: 56,
-  ucHesitationMax: 89,
   ucCompareEnabled: true,
   ucLostEnabled: true,
+  thresholdBrowsing: 30,
+  thresholdConsidering: 55,
+  thresholdStrongIntent: 89,
+  thresholdReadyToBuy: 90,
   ucLostBackNavMin: 3,
   maxAlternatives: 2,
 };
@@ -27,10 +29,12 @@ async function loadSettings(shop: string): Promise<UseCaseSettings> {
   return {
     enabled: row.enabled,
     ucHesitationEnabled: row.alternativeNudge,
-    ucHesitationMin: row.ucHesitationMin,
-    ucHesitationMax: row.ucHesitationMax,
     ucCompareEnabled: row.comparisonBar,
     ucLostEnabled: row.tagNavigator,
+    thresholdBrowsing: row.thresholdBrowsing,
+    thresholdConsidering: row.thresholdConsidering,
+    thresholdStrongIntent: row.thresholdStrongIntent,
+    thresholdReadyToBuy: row.thresholdReadyToBuy,
     ucLostBackNavMin: row.ucLostBackNavMin,
     maxAlternatives: row.maxAlternatives,
   };
@@ -42,9 +46,9 @@ export async function evaluateIntent(payload: SignalPayload): Promise<IntentActi
   // Master kill switch
   if (!settings.enabled) return NONE_ACTION;
 
-  // Score gates — PRD Section 2.3
-  if (payload.score < 30) return NONE_ACTION;  // Browsing, don't interrupt
-  if (payload.score >= 90) return NONE_ACTION;  // Ready to buy, don't distract!
+  // Score gates — use merchant-configurable thresholds
+  if (payload.score < settings.thresholdBrowsing) return NONE_ACTION;  // Browsing, don't interrupt
+  if (payload.score >= settings.thresholdReadyToBuy) return NONE_ACTION;  // Ready to buy, don't distract!
 
   // Iterate registered UC handlers in priority order — first match wins
   for (const handler of useCaseHandlers) {
