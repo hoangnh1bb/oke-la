@@ -87,7 +87,7 @@ async function handleGetConfig(shop: string) {
     enabled: settings.enabled,
     ucHesitationMin: settings.ucHesitationMin,
     ucHesitationMax: settings.ucHesitationMax,
-    ucCompareEnabled: settings.ucCompareEnabled,
+    ucCompareEnabled: settings.comparisonBar,
     ucLostBackNavMin: settings.ucLostBackNavMin,
     ucCartHesitationSec: settings.ucCartHesitationSec,
     maxAlternatives: settings.maxAlternatives,
@@ -115,7 +115,7 @@ async function handleGetAlternatives(url: URL, shop: string) {
 }
 
 async function handlePostTrack(body: TrackPayload) {
-  await prisma.analyticsEvent.create({
+  await prisma.smartRecEvent.create({
     data: {
       shop: body.shop,
       sessionId: body.sessionId,

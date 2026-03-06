@@ -66,11 +66,8 @@ export async function action({ request }: ActionFunctionArgs) {
         data: {
           shopId: shop,
           orderId: order.id.toString(),
-          orderNumber: order.order_number?.toString() || order.id.toString(),
-          attributedRevenue,
-          totalOrderValue: parseFloat(order.total_price || "0"),
-          attributedProducts: attributedProducts.join(","),
-          orderDate: orderTime,
+          productIds: JSON.stringify(attributedProducts),
+          orderTotal: parseFloat(order.total_price || "0"),
         },
       });
 

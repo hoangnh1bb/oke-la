@@ -1,0 +1,16 @@
+{
+  "name": "smartrec-concierge-src",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch"
+  },
+  "devDependencies": {
+    "vite": "^6.2.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "marked": "^15.0.0"
+  }
+}

@@ -92,8 +92,8 @@
     {%- endif -%}
   </div>
 
-  {{ 'smartrec-signal-collector.js' | asset_url | script_tag }}
-  {{ 'smartrec-widget-renderer.js' | asset_url | script_tag }}
+  <script src="{{ 'smartrec-signal-collector.js' | asset_url }}" defer></script>
+  <script src="{{ 'smartrec-widget-renderer.js' | asset_url }}" defer></script>
 </div>
 
 {% schema %}

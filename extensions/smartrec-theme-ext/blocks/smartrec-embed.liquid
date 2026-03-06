@@ -19,11 +19,11 @@
 </script>
 
 {% if block.settings.enable_tracking %}
-  {{ 'smartrec-signal-collector.js' | asset_url | script_tag }}
+  <script src="{{ 'smartrec-signal-collector.js' | asset_url }}" defer></script>
 {% endif %}
 
 {% if block.settings.enable_widgets %}
-  {{ 'smartrec-widget-renderer.js' | asset_url | script_tag }}
+  <script src="{{ 'smartrec-widget-renderer.js' | asset_url }}" defer></script>
 {% endif %}
 
 {% schema %}

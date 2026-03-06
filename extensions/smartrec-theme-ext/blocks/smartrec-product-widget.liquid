@@ -100,7 +100,6 @@
   </style>
 
   {%- assign recommendations = product.collections.first.products | default: collections.all.products -%}
-  {%- assign recs = "" -%}
   {%- assign count = 0 -%}
 
   {%- comment -%} Collect up to 2 alternative products {%- endcomment -%}
@@ -277,8 +276,8 @@
     </div>
   {%- endif -%}
 
-  {{ 'smartrec-signal-collector.js' | asset_url | script_tag }}
-  {{ 'smartrec-widget-renderer.js' | asset_url | script_tag }}
+  <script src="{{ 'smartrec-signal-collector.js' | asset_url }}" defer></script>
+  <script src="{{ 'smartrec-widget-renderer.js' | asset_url }}" defer></script>
 </div>
 
 {% schema %}

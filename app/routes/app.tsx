@@ -21,10 +21,13 @@ export default function App() {
         <s-link href="/app">Home</s-link>
         <s-link href="/app/onboarding">Onboarding</s-link>
         <s-link href="/app/smartrec">SmartRec</s-link>
-        <s-link href="/app/additional">Additional page</s-link>
+        {/* <s-link href="/app/additional">Additional page</s-link> */}
         <s-link href="/app/pricing-dashboard">Pricing & Usage</s-link>
         <s-link href="/app/settings/appearance">Appearance</s-link>
         <s-link href="/app/billing/addon">Add-ons</s-link>
+        <s-link href="/app/smartrec-settings">SmartRec Settings</s-link>
+        <s-link href="/app/smartrec-analytics">Analytics</s-link>
+        <s-link href="/app/ai-agents">Assistant</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>

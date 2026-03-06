@@ -5,6 +5,8 @@ import {
   shopPolicyCache,
   type CachedProduct,
 } from "./product-cache.server";
+import { getShopSettings } from "./smartrec/shop-settings-adapter.server";
+import prisma from "../db.server";
 
 // Type for the admin GraphQL client from authenticate.public.appProxy
 type AdminClient = {
@@ -266,9 +268,30 @@ interface IntentRequestBody {
 
 /**
  * POST /apps/smartrec/track — receive behavioral signals
+ * Optionally logs to ActionLog when body has actionType field.
  */
 export async function handleTrack(body: unknown) {
   console.log("[SmartRec] Track:", JSON.stringify(body).slice(0, 200));
+
+  // Optional ActionLog write — fail silently
+  try {
+    const b = body as Record<string, unknown>;
+    if (b && typeof b.actionType === "string" && typeof b.shop === "string") {
+      await prisma.actionLog.create({
+        data: {
+          shop: b.shop,
+          actionType: b.actionType,
+          productId: typeof b.productId === "string" ? b.productId : undefined,
+          clicked: b.clicked === true,
+          convertedToCart: b.convertedToCart === true,
+          sessionId: typeof b.sessionId === "string" ? b.sessionId : "unknown",
+        },
+      });
+    }
+  } catch (e) {
+    // Silent — tracking must never break the storefront
+  }
+
   return { ok: true };
 }
 
@@ -444,22 +467,47 @@ export async function handleProducts(
 
 /**
  * GET /apps/smartrec/config — merchant widget settings
+ * Reads real values from ShopSettings via adapter (falls back to defaults).
  */
-export async function handleConfig(_params: URLSearchParams) {
-  return {
-    enabled: true,
-    thresholds: {
-      browsing: 30,
-      considering: 55,
-      highConsideration: 75,
-      strongIntent: 89,
-      readyToBuy: 90,
-    },
-    widgets: {
-      alternative_nudge: true,
-      comparison_bar: true,
-      tag_navigator: true,
-      trust_nudge: true,
-    },
-  };
+export async function handleConfig(params: URLSearchParams) {
+  const shop = params.get("shop") || "";
+
+  if (!shop) {
+    return {
+      enabled: true,
+      thresholds: { browsing: 30, considering: 55, highConsideration: 75, strongIntent: 89, readyToBuy: 90 },
+      widgets: { alternative_nudge: true, comparison_bar: true, tag_navigator: true, trust_nudge: true },
+    };
+  }
+
+  try {
+    const settings = await getShopSettings(shop);
+    return {
+      enabled: settings.enabled,
+      thresholds: {
+        browsing: settings.thresholdBrowsing,
+        considering: settings.thresholdConsidering,
+        highConsideration: settings.thresholdHighConsideration,
+        strongIntent: settings.thresholdStrongIntent,
+        readyToBuy: 90,
+      },
+      widgets: {
+        alternative_nudge: settings.widgetAlternativeNudge,
+        comparison_bar: settings.widgetComparisonBar,
+        tag_navigator: settings.widgetTagNavigator,
+        trust_nudge: settings.widgetTrustNudge,
+      },
+      // Concierge branding (systemPromptOverride intentionally excluded — server-side only)
+      agentName: settings.agentName,
+      agentColor: settings.agentColor,
+      proactiveMessage: settings.proactiveMessage,
+    };
+  } catch (e) {
+    console.error("[SmartRec] handleConfig error:", e);
+    return {
+      enabled: true,
+      thresholds: { browsing: 30, considering: 55, highConsideration: 75, strongIntent: 89, readyToBuy: 90 },
+      widgets: { alternative_nudge: true, comparison_bar: true, tag_navigator: true, trust_nudge: true },
+    };
+  }
 }

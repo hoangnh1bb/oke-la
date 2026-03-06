@@ -139,3 +139,146 @@ model SmartRecEvent {
   @@index([shop, createdAt])
   @@index([shop, widgetType])
 }
+
+// ── Core SmartRec v2 ──────────────────────────────────────────
+
+model ShopSettings {
+  id        String   @id @default(cuid())
+  shop      String   @unique
+  enabled   Boolean  @default(true)
+  thresholdBrowsing          Int @default(30)
+  thresholdConsidering       Int @default(55)
+  thresholdHighConsideration Int @default(75)
+  thresholdStrongIntent      Int @default(89)
+  widgetAlternativeNudge Boolean @default(true)
+  widgetComparisonBar    Boolean @default(true)
+  widgetTagNavigator     Boolean @default(true)
+  widgetTrustNudge       Boolean @default(true)
+  // AI feature toggles
+  aiExplanationsEnabled Boolean @default(true)
+  aiQuizEnabled         Boolean @default(true)
+  aiVisualEnabled       Boolean @default(false)
+  aiConciergeEnabled    Boolean @default(false)
+  // Concierge branding
+  agentName            String  @default("SmartRec Assistant")
+  agentColor           String  @default("#4A90E2")
+  proactiveMessage     String  @default("Hi! Want to know more about this product?")
+  systemPromptOverride String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("smartrec_shop_settings")
+}
+
+model ProductCache {
+  id               String   @id @default(cuid())
+  shop             String
+  shopifyProductId String
+  handle           String
+  title            String
+  productType      String   @default("")
+  price            Float
+  imageUrl         String   @default("")
+  tags             String   @default("") // comma-separated
+  rating           Float    @default(0)
+  reviewCount      Int      @default(0)
+  availableForSale Boolean  @default(true)
+  cachedAt         DateTime @default(now())
+
+  @@unique([shop, shopifyProductId])
+  @@index([shop, productType])
+  @@map("smartrec_product_cache")
+}
+
+model SignalAggregate {
+  id               String @id @default(cuid())
+  shop             String
+  shopifyProductId String
+  viewCount        Int    @default(0)
+  avgTimeOnPage    Float  @default(0)
+  addToCartCount   Int    @default(0)
+  purchaseCount    Int    @default(0)
+  backNavCount     Int    @default(0)
+  substitutionProductIds String @default("[]") // JSON array
+  updatedAt DateTime @updatedAt
+
+  @@unique([shop, shopifyProductId])
+  @@index([shop])
+  @@map("smartrec_signal_aggregates")
+}
+
+model ActionLog {
+  id              String   @id @default(cuid())
+  shop            String
+  actionType      String   // alternative_nudge|comparison_bar|tag_navigator|trust_nudge
+  productId       String?
+  clicked         Boolean  @default(false)
+  convertedToCart Boolean  @default(false)
+  sessionId       String   // anonymous localStorage UUID
+  createdAt       DateTime @default(now())
+
+  @@index([shop, actionType])
+  @@index([shop, createdAt])
+  @@map("smartrec_action_logs")
+}
+
+// ── AI Infrastructure ─────────────────────────────────────────
+
+model ProductEmbedding {
+  id        Int      @id @default(autoincrement())
+  shopId    String
+  productId String
+  vector    String   // JSON float[] — 1536-dim (OpenAI text-embedding-3-small)
+  updatedAt DateTime @updatedAt
+
+  @@unique([shopId, productId])
+  @@index([shopId])
+  @@map("smartrec_product_embeddings")
+}
+
+model ProductImageEmbedding {
+  id        Int      @id @default(autoincrement())
+  shopId    String
+  productId String
+  imageUrl  String
+  vector    String   // JSON float[] — 512-dim (CLIP clip-vit-base-patch32)
+  updatedAt DateTime @updatedAt
+
+  @@unique([shopId, productId])
+  @@index([shopId])
+  @@map("smartrec_product_image_embeddings")
+}
+
+model ExplainerCache {
+  id          Int      @id @default(autoincrement())
+  shopId      String
+  productAId  String
+  productBId  String
+  explanation String
+  plan        String   @default("template") // "template"|"llm"
+  updatedAt   DateTime @updatedAt
+
+  @@unique([shopId, productAId, productBId])
+  @@map("smartrec_explainer_cache")
+}
+
+model QuizConfig {
+  shopId    String   @id
+  config    String   // JSON: { enabled, questions, priceBuckets, generatedAt }
+  updatedAt DateTime @updatedAt
+
+  @@map("smartrec_quiz_configs")
+}
+
+model LlmRequestLog {
+  id         Int      @id @default(autoincrement())
+  shopId     String
+  feature    String   // "explainer"|"concierge"
+  tokensUsed Int
+  costUsd    Float
+  createdAt  DateTime @default(now())
+
+  @@index([shopId, createdAt])
+  @@index([shopId, feature])
+  @@map("smartrec_llm_request_logs")
+}

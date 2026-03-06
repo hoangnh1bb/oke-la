@@ -28,13 +28,13 @@ async function loadSettings(shop: string): Promise<UseCaseSettings> {
   if (!row) return DEFAULT_SETTINGS;
   return {
     enabled: row.enabled,
-    ucHesitationEnabled: row.ucHesitationEnabled,
+    ucHesitationEnabled: row.alternativeNudge,
     ucHesitationMin: row.ucHesitationMin,
     ucHesitationMax: row.ucHesitationMax,
-    ucCompareEnabled: row.ucCompareEnabled,
-    ucLostEnabled: row.ucLostEnabled,
+    ucCompareEnabled: row.comparisonBar,
+    ucLostEnabled: row.tagNavigator,
     ucLostBackNavMin: row.ucLostBackNavMin,
-    ucCartEnabled: row.ucCartEnabled,
+    ucCartEnabled: row.trustNudge,
     ucCartHesitationSec: row.ucCartHesitationSec,
     maxAlternatives: row.maxAlternatives,
   };

@@ -1,0 +1,79 @@
+{% if block.settings.enable %}
+<script>
+  window.SmartRecConciergeMeta = {
+    appProxy: "https://{{ shop.permanent_domain }}/apps/smartrec",
+    shop: {{ shop.permanent_domain | json }},
+    customerId: {{ customer.id | default: nil | json }},
+    primaryColor: {{ block.settings.primary_color | json }},
+    agentName: {{ block.settings.agent_name | json }},
+    proactiveMessage: {{ block.settings.proactive_message | json }},
+    {% if product %}
+    productId: {{ product.id | json }},
+    productTitle: {{ product.title | json }},
+    productType: {{ product.type | json }},
+    {% else %}
+    productId: null,
+    productTitle: null,
+    productType: null,
+    {% endif %}
+    features: {
+      quiz: {{ block.settings.quiz_enabled | json }},
+      visual: {{ block.settings.visual_enabled | json }},
+      explainer: {{ block.settings.explainer_enabled | json }}
+    }
+  };
+</script>
+<script src="{{ 'smartrec-concierge.iife.js' | asset_url }}" defer></script>
+<smartrec-concierge></smartrec-concierge>
+{% endif %}
+
+{% schema %}
+{
+  "name": "SmartRec Concierge",
+  "target": "body",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "enable",
+      "label": "Enable Concierge",
+      "default": true
+    },
+    {
+      "type": "color",
+      "id": "primary_color",
+      "label": "Chat bubble color",
+      "default": "#4A90E2"
+    },
+    {
+      "type": "text",
+      "id": "agent_name",
+      "label": "Agent display name",
+      "default": "SmartRec Assistant"
+    },
+    {
+      "type": "textarea",
+      "id": "proactive_message",
+      "label": "Proactive nudge message (shown after 5s on product pages)",
+      "default": "Hi! Want to know more about this product?"
+    },
+    {
+      "type": "checkbox",
+      "id": "quiz_enabled",
+      "label": "Enable quiz recommendations in chat",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "visual_enabled",
+      "label": "Enable visual search in chat",
+      "default": false
+    },
+    {
+      "type": "checkbox",
+      "id": "explainer_enabled",
+      "label": "Enable product explainer in chat",
+      "default": true
+    }
+  ]
+}
+{% endschema %}
