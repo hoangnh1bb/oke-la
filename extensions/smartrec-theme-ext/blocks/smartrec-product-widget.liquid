@@ -127,17 +127,17 @@
       </div>
       <div class="sr-ph-trigger-text">
         <p class="sr-ph-trigger-label">Product Recommendations</p>
-        <p class="sr-ph-trigger-hint">{{ count }} sản phẩm tương tự — bấm để xem</p>
+        <p class="sr-ph-trigger-hint">{{ count }} similar products — tap to view</p>
       </div>
       <span class="sr-ph-arrow">›</span>
     </div>
 
     {%- comment -%} Popup overlay {%- endcomment -%}
-    <div class="sr-ph sr-ph-overlay" id="sr-ph-overlay" onclick="if(event.target===this)srClosePopup()">
+    <div class="sr-ph sr-ph-overlay" id="sr-ph-overlay">
       <div class="sr-ph-popup">
         <p class="sr-ph-popup-title">Product Recommendations</p>
-        <p class="sr-ph-popup-sub">Khách hàng tương tự cũng xem những sản phẩm này.</p>
-        <button class="sr-ph-close" onclick="srClosePopup()" aria-label="Đóng">✕</button>
+        <p class="sr-ph-popup-sub">Products you recently viewed</p>
+        <button class="sr-ph-close" onclick="srClosePopup()" aria-label="Close">✕</button>
 
         {%- assign count2 = 0 -%}
         {%- for rec in recommendations limit: 10 -%}
@@ -157,9 +157,9 @@
                     type="button"
                     onclick="srAddToCart({{ rec.selected_or_first_available_variant.id }}, this)"
                   >
-                    Thêm vào giỏ
+                    Add to cart
                   </button>
-                  <a class="sr-ph-view" href="{{ rec.url }}">Xem chi tiết</a>
+                  <a class="sr-ph-view" href="{{ rec.url }}" onclick="if(typeof srTrackEvent==='function')srTrackEvent('view_detail','alternative_nudge','{{ rec.id }}',0)">View details</a>
                 </div>
               </div>
             </div>
@@ -172,9 +172,22 @@
     <script>
       function srClosePopup() {
         var o = document.getElementById('sr-ph-overlay');
+        if (!o) return;
         o.classList.remove('open');
         setTimeout(function() { o.style.display = 'none'; }, 300);
       }
+
+      (function() {
+        var overlay = document.getElementById('sr-ph-overlay');
+        if (!overlay) return;
+        overlay.addEventListener('click', function(e) {
+          var popup = overlay.querySelector('.sr-ph-popup');
+          if (popup && !popup.contains(e.target)) srClosePopup();
+        });
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && overlay.classList.contains('open')) srClosePopup();
+        });
+      })();
 
       function srIsThemeEditor() {
         return window.Shopify && window.Shopify.designMode;
@@ -190,43 +203,57 @@
         }).catch(function() {});
       }
 
+      function srGetSectionIds() {
+        var ids = [];
+        var candidates = ['cart-notification-product','cart-notification-button','cart-icon-bubble','cart-drawer','cart-notification','main-cart-items','cart-live-region-text'];
+        for (var i = 0; i < candidates.length; i++) {
+          if (document.getElementById('shopify-section-' + candidates[i])) ids.push(candidates[i]);
+        }
+        return ids;
+      }
+
       function srAddToCart(variantId, btn) {
-        if (!variantId) { btn.textContent = 'Không có variant'; return; }
+        if (!variantId) { btn.textContent = 'No variant'; return; }
 
         if (srIsThemeEditor()) {
-          btn.textContent = '✓ Đã thêm (preview)';
+          btn.textContent = '✓ Added (preview)';
           btn.classList.add('sr-ph-atc-ok');
           setTimeout(function() {
-            btn.textContent = 'Thêm vào giỏ';
+            btn.textContent = 'Add to cart';
             btn.classList.remove('sr-ph-atc-ok');
           }, 1500);
           return;
         }
 
         var origText = btn.textContent;
-        btn.textContent = 'Đang thêm...';
+        btn.textContent = 'Adding...';
         btn.disabled = true;
 
-        var formData = new FormData();
-        formData.append('id', variantId);
-        formData.append('quantity', '1');
+        var sectionIds = srGetSectionIds();
+        var payload = {
+          items: [{ id: parseInt(variantId, 10), quantity: 1 }]
+        };
+        if (sectionIds.length > 0) payload.sections = sectionIds.join(',');
 
         fetch(window.Shopify.routes.root + 'cart/add.js', {
           method: 'POST',
-          body: formData
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(payload)
         })
         .then(function(res) {
-          if (!res.ok) throw new Error('HTTP ' + res.status);
+          if (!res.ok) return res.json().then(function(e) { throw new Error(e.description || 'HTTP ' + res.status); });
           return res.json();
         })
-        .then(function(item) {
-          btn.textContent = '✓ Đã thêm';
+        .then(function(data) {
+          btn.textContent = '✓ Added';
           btn.classList.add('sr-ph-atc-ok');
 
+          if (data.sections) srUpdateSections(data.sections);
           srRefreshCart();
           srClosePopup();
 
           try {
+            var item = data.items ? data.items[0] : data;
             var atcValue = item && item.price ? item.price : 0;
             srTrackEvent('widget_atc', 'alternative_nudge', item.product_id, atcValue);
           } catch(e) {}
@@ -239,10 +266,23 @@
         })
         .catch(function(err) {
           console.error('[SmartRec] ATC error:', err);
-          btn.textContent = 'Lỗi — thử lại';
+          btn.textContent = err.message || 'Error — retry';
           btn.disabled = false;
           setTimeout(function() { btn.textContent = origText; btn.disabled = false; }, 3000);
         });
+      }
+
+      function srUpdateSections(sections) {
+        if (!sections) return;
+        var keys = Object.keys(sections);
+        for (var i = 0; i < keys.length; i++) {
+          var el = document.getElementById('shopify-section-' + keys[i]);
+          if (el && sections[keys[i]]) {
+            el.innerHTML = new DOMParser()
+              .parseFromString(sections[keys[i]], 'text/html')
+              .querySelector('.shopify-section')?.innerHTML || sections[keys[i]];
+          }
+        }
       }
 
       function srRefreshCart() {
@@ -252,7 +292,7 @@
         .then(function(r) { return r.json(); })
         .then(function(cart) {
           var countEls = document.querySelectorAll(
-            '.cart-count-bubble span, [data-cart-count], .cart-count, .js-cart-count, #cart-icon-bubble span'
+            '.cart-count-bubble span, [data-cart-count], .cart-count, .js-cart-count, #cart-icon-bubble span, .header__cart-count'
           );
           countEls.forEach(function(el) { el.textContent = cart.item_count; });
 
@@ -261,26 +301,25 @@
             if (cart.item_count > 0) b.removeAttribute('hidden');
           });
 
-          document.documentElement.dispatchEvent(
-            new CustomEvent('cart:refresh', { bubbles: true, detail: { cart: cart } })
-          );
+          document.documentElement.dispatchEvent(new CustomEvent('cart:refresh', { bubbles: true, detail: { cart: cart } }));
+          document.documentElement.dispatchEvent(new CustomEvent('cart:change', { bubbles: true, detail: { cart: cart } }));
         })
         .catch(function() {});
 
-        var notification = document.querySelector('cart-notification');
-        if (notification) {
-          if (typeof notification.open === 'function') {
-            notification.open();
-          } else {
-            notification.classList.add('animate', 'active');
-            notification.removeAttribute('hidden');
-          }
-        }
-
         var drawer = document.querySelector('cart-drawer');
         if (drawer) {
-          if (typeof drawer.open === 'function') {
-            drawer.open();
+          if (typeof drawer.renderContents === 'function') {
+            fetch(window.Shopify.routes.root + '?sections=cart-drawer')
+            .then(function(r) { return r.json(); })
+            .then(function(s) {
+              var html = s['cart-drawer'];
+              if (html) {
+                var parsed = new DOMParser().parseFromString(html, 'text/html');
+                var newDrawerInner = parsed.querySelector('cart-drawer');
+                if (newDrawerInner) drawer.innerHTML = newDrawerInner.innerHTML;
+              }
+              if (typeof drawer.open === 'function') drawer.open();
+            }).catch(function() {});
           } else {
             drawer.classList.add('active', 'is-open');
             var details = drawer.querySelector('details');
@@ -288,30 +327,33 @@
           }
         }
 
-        fetch(window.Shopify.routes.root + '?sections=cart-notification-product,cart-notification-button,cart-icon-bubble,cart-drawer')
-        .then(function(r) { return r.json(); })
-        .then(function(sections) {
-          Object.keys(sections).forEach(function(id) {
-            var el = document.getElementById('shopify-section-' + id);
-            if (el && sections[id]) {
-              var tmp = document.createElement('div');
-              tmp.innerHTML = sections[id];
-              var inner = tmp.querySelector('.shopify-section');
-              el.innerHTML = inner ? inner.innerHTML : sections[id];
-            }
-          });
-        })
-        .catch(function() {});
+        var notification = document.querySelector('cart-notification');
+        if (notification) {
+          fetch(window.Shopify.routes.root + '?sections=cart-notification-product,cart-notification-button')
+          .then(function(r) { return r.json(); })
+          .then(function(s) {
+            Object.keys(s).forEach(function(id) {
+              var el = document.getElementById('shopify-section-' + id);
+              if (el && s[id]) {
+                el.innerHTML = new DOMParser()
+                  .parseFromString(s[id], 'text/html')
+                  .querySelector('.shopify-section')?.innerHTML || s[id];
+              }
+            });
+            if (typeof notification.open === 'function') { notification.open(); }
+            else { notification.classList.add('animate', 'active'); notification.removeAttribute('hidden'); }
+          }).catch(function() {});
+        }
       }
     </script>
   {%- else -%}
     <div class="sr-ph" style="padding:12px 16px;margin:16px 0;border:1px solid rgba(0,0,0,0.06);border-radius:var(--buttons-radius,4px);font-size:13px;color:#6b7280;">
-      SmartRec widget sẽ hiện gợi ý sản phẩm khi có dữ liệu.
+      SmartRec widget will show product recommendations when data is available.
     </div>
   {%- endif -%}
 
-  {{ 'smartrec-signal-collector.js' | asset_url | script_tag }}
-  {{ 'smartrec-widget-renderer.js' | asset_url | script_tag }}
+  <script src="{{ 'smartrec-signal-collector.js' | asset_url }}" defer></script>
+  <script src="{{ 'smartrec-widget-renderer.js' | asset_url }}" defer></script>
 </div>
 
 {% schema %}
@@ -324,14 +366,14 @@
       "id": "enable_alt_nudge",
       "label": "Enable Alternative Nudge",
       "default": true,
-      "info": "Gợi ý sản phẩm thay thế khi khách hàng đang phân vân"
+      "info": "Suggest alternative products when customers are hesitating"
     },
     {
       "type": "checkbox",
       "id": "enable_comparison",
       "label": "Enable Comparison Bar",
       "default": true,
-      "info": "So sánh 2 sản phẩm khi khách xem qua lại"
+      "info": "Compare 2 products when customers browse back and forth"
     }
   ]
 }

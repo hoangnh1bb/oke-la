@@ -72,7 +72,7 @@ export async function action({ request }: ActionFunctionArgs): Promise<Response>
       widgetTexts: JSON.stringify(widgetTexts),
       buttonStyle,
       primaryColor: "#4A90E2",
-      headlineText: "Bạn có thể thích",
+      headlineText: "You may also like",
       updatedAt: new Date(),
     },
     update: {

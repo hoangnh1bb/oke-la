@@ -28,7 +28,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const [
     imp7, imp30,
     atc7, atc30,
-    rev7Agg, rev30Agg,
+    viewDetail7, viewDetail30,
     topProducts7, topProducts30,
     recentEvents,
   ] = await Promise.all([
@@ -44,13 +44,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     db.smartRecEvent.count({
       where: { shop, eventType: "widget_atc", createdAt: { gte: d30 } },
     }),
-    db.smartRecEvent.aggregate({
-      where: { shop, eventType: "widget_atc", createdAt: { gte: d7 } },
-      _sum: { value: true },
+    db.smartRecEvent.count({
+      where: { shop, eventType: "view_detail", createdAt: { gte: d7 } },
     }),
-    db.smartRecEvent.aggregate({
-      where: { shop, eventType: "widget_atc", createdAt: { gte: d30 } },
-      _sum: { value: true },
+    db.smartRecEvent.count({
+      where: { shop, eventType: "view_detail", createdAt: { gte: d30 } },
     }),
     db.smartRecEvent.groupBy({
       by: ["productId"],
@@ -107,8 +105,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       impressions30: imp30,
       clicks7: atc7,
       clicks30: atc30,
-      revenue7: rev7Agg._sum.value || 0,
-      revenue30: rev30Agg._sum.value || 0,
+      viewDetail7: viewDetail7,
+      viewDetail30: viewDetail30,
       topProducts7: topProducts7.map((p) => ({
         productId: p.productId || "unknown",
         impressions: p._count,
@@ -134,6 +132,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
+  const intent = formData.get("_intent");
+
+  if (intent === "test_track") {
+    await db.smartRecEvent.create({
+      data: {
+        shop,
+        eventType: "widget_atc",
+        widgetType: "alternative_nudge",
+        productId: "test-" + Date.now(),
+        value: 299000,
+      },
+    });
+    return { success: true, tested: true };
+  }
+
+  if (intent === "clear_events") {
+    await db.smartRecEvent.deleteMany({ where: { shop } });
+    return { success: true, cleared: true };
+  }
 
   const boolField = (key: string) => formData.get(key) === "true";
   const intField = (key: string, fallback: number) =>
@@ -160,7 +177,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     styleButtonStyle: strField("styleButtonStyle", "filled"),
     stylePosition: strField("stylePosition", "default"),
     styleCustomCSS: strField("styleCustomCSS", ""),
-    widgetTitle: strField("widgetTitle", "Không chắc chắn? Khách hàng tương tự cũng xem những sản phẩm này."),
+    widgetTitle: strField("widgetTitle", "Not sure? Similar customers also viewed these products."),
   };
 
   await db.smartRecSettings.upsert({
@@ -178,10 +195,10 @@ type WidgetKey = "alternativeNudge" | "comparisonBar" | "tagNavigator" | "trustN
 type Tab = "settings" | "analytics" | "appearance";
 
 const WIDGET_INFO: { key: WidgetKey; title: string; desc: string; icon: string; color: string }[] = [
-  { key: "alternativeNudge", title: "Alternative Nudge", desc: "Gợi ý sản phẩm thay thế khi khách đang phân vân trên product page", icon: "💡", color: "#6366f1" },
-  { key: "comparisonBar", title: "Comparison Bar", desc: "So sánh 2 sản phẩm khi khách xem qua lại nhiều sản phẩm", icon: "⚖️", color: "#0891b2" },
-  { key: "tagNavigator", title: "Tag Navigator", desc: "Gợi ý tag lọc sản phẩm khi khách bị lạc, back nhiều lần", icon: "🏷️", color: "#d97706" },
-  { key: "trustNudge", title: "Trust Nudge", desc: "Hiện rating + đổi trả miễn phí khi khách do dự trên cart page", icon: "🛡️", color: "#059669" },
+  { key: "alternativeNudge", title: "Alternative Nudge", desc: "Suggest alternative products when shoppers hesitate on product page", icon: "💡", color: "#6366f1" },
+  { key: "comparisonBar", title: "Comparison Bar", desc: "Compare 2 products when shoppers browse back and forth", icon: "⚖️", color: "#0891b2" },
+  { key: "tagNavigator", title: "Tag Navigator", desc: "Suggest filter tags when shoppers seem lost, navigate back often", icon: "🏷️", color: "#d97706" },
+  { key: "trustNudge", title: "Trust Nudge", desc: "Show ratings + free returns badge when shoppers hesitate on cart page", icon: "🛡️", color: "#059669" },
 ];
 
 // ── Dashboard Component ──────────────────────────────────────
@@ -238,14 +255,10 @@ export default function SmartRecDashboard() {
 
   const imp = analyticsPeriod === "7" ? analytics.impressions7 : analytics.impressions30;
   const clicks = analyticsPeriod === "7" ? analytics.clicks7 : analytics.clicks30;
-  const revenue = analyticsPeriod === "7" ? analytics.revenue7 : analytics.revenue30;
+  const viewDetail = analyticsPeriod === "7" ? analytics.viewDetail7 : analytics.viewDetail30;
   const topProducts = analyticsPeriod === "7" ? analytics.topProducts7 : analytics.topProducts30;
   const ctr = imp > 0 ? ((clicks / imp) * 100).toFixed(1) : "0.0";
 
-  function formatRevenue(val: number): string {
-    if (val === 0) return "0₫";
-    return val.toLocaleString("vi-VN") + "₫";
-  }
 
   return (
     <s-page heading="SmartRec Dashboard">
@@ -268,10 +281,10 @@ export default function SmartRecDashboard() {
         }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 600, color: enabled ? "#166534" : "#6b7280" }}>
-              {enabled ? "SmartRec đang hoạt động" : "SmartRec tạm dừng"}
+              {enabled ? "SmartRec is active" : "SmartRec is paused"}
             </div>
             <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
-              {Object.values(widgets).filter(Boolean).length}/4 widgets bật
+              {Object.values(widgets).filter(Boolean).length}/4 widgets enabled
             </div>
           </div>
           <s-checkbox checked={enabled || undefined} onChange={() => setEnabled(!enabled)}>
@@ -284,7 +297,7 @@ export default function SmartRecDashboard() {
       <s-section>
         <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #e5e7eb", marginBottom: 4 }}>
           {([
-            { id: "settings" as Tab, label: "Cài đặt" },
+            { id: "settings" as Tab, label: "Settings" },
             { id: "analytics" as Tab, label: "Analytics" },
             { id: "appearance" as Tab, label: "Appearance" },
           ]).map((tab) => (
@@ -307,7 +320,7 @@ export default function SmartRecDashboard() {
       </s-section>
 
       {/* ═══════════════════════════════════════════════════════════
-           TAB 1 — CÀI ĐẶT
+           TAB 1 — SETTINGS
          ═══════════════════════════════════════════════════════════ */}
       {activeTab === "settings" && (
         <>
@@ -342,20 +355,20 @@ export default function SmartRecDashboard() {
           </s-section>
 
           {/* Sensitivity Slider */}
-          <s-section heading="Ngưỡng kích hoạt">
+          <s-section heading="Activation Threshold">
             <s-text variant="subdued">
-              Điều chỉnh độ nhạy của SmartRec. "Nhạy" hiện widget sớm hơn, "Thận trọng" chỉ hiện khi tín hiệu rất rõ ràng.
+              Adjust SmartRec sensitivity. "Sensitive" shows widgets earlier, "Cautious" only shows when signals are very clear.
             </s-text>
             <div style={{
               marginTop: 16, padding: 20, background: "#f9fafb", borderRadius: 12,
               border: "1px solid #e5e7eb",
             }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 500, marginBottom: 12 }}>
-                <span style={{ color: "#d97706" }}>Nhạy</span>
+                <span style={{ color: "#d97706" }}>Sensitive</span>
                 <span style={{ color: "#6b7280", fontWeight: 700 }}>
                   Intent Score threshold: {sensitivity}
                 </span>
-                <span style={{ color: "#059669" }}>Thận trọng</span>
+                <span style={{ color: "#059669" }}>Cautious</span>
               </div>
               <input
                 type="range"
@@ -374,10 +387,10 @@ export default function SmartRecDashboard() {
               </div>
               <p style={{ fontSize: 12, color: "#6b7280", marginTop: 12, lineHeight: 1.6 }}>
                 {sensitivity <= 50
-                  ? "Widget sẽ hiện khá sớm trong hành trình mua hàng. Phù hợp store có traffic thấp, muốn tối đa cơ hội convert."
+                  ? "Widgets appear early in the shopping journey. Best for low-traffic stores to maximize conversion opportunities."
                   : sensitivity <= 60
-                    ? "Mức cân bằng. Widget hiện khi có đủ tín hiệu quan tâm nhưng chưa quá trễ."
-                    : "Widget chỉ hiện khi shopper thật sự đang cân nhắc. Ít xâm phạm trải nghiệm mua hàng."}
+                    ? "Balanced. Widgets appear when there are enough interest signals but not too late."
+                    : "Widgets only appear when the shopper is truly considering. Least intrusive to the shopping experience."}
               </p>
             </div>
           </s-section>
@@ -389,127 +402,102 @@ export default function SmartRecDashboard() {
          ═══════════════════════════════════════════════════════════ */}
       {activeTab === "analytics" && (
         <>
-          {!analytics.hasData ? (
-            <s-section>
+          {/* Test + Period Toggle */}
+          <s-section>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <div />
               <div style={{
-                textAlign: "center", padding: "60px 20px",
-                background: "#f9fafb", borderRadius: 12, border: "1px solid #e5e7eb",
+                display: "inline-flex", borderRadius: 8, border: "1px solid #e5e7eb", overflow: "hidden",
               }}>
-                <div style={{ fontSize: 48, marginBottom: 16 }}>📊</div>
-                <div style={{
-                  width: 40, height: 40, margin: "0 auto 20px",
-                  border: "3px solid #e5e7eb", borderTopColor: "#6366f1",
-                  borderRadius: "50%", animation: "sr-spin 1s linear infinite",
-                }} />
-                <style>{`@keyframes sr-spin { to { transform: rotate(360deg); } }`}</style>
-                <p style={{ fontSize: 16, fontWeight: 600, margin: "0 0 8px", color: "#1a1a1a" }}>
-                  SmartRec đang thu thập data
-                </p>
-                <p style={{ fontSize: 14, color: "#6b7280", margin: 0, maxWidth: 400, marginLeft: "auto", marginRight: "auto", lineHeight: 1.6 }}>
-                  Data cập nhật realtime. Khi khách hàng xem hoặc click "Thêm vào giỏ" từ widget, số liệu sẽ hiện ngay tại đây.
-                </p>
+                {(["7", "30"] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setAnalyticsPeriod(p)}
+                    style={{
+                      padding: "6px 16px", fontSize: 13, fontWeight: analyticsPeriod === p ? 600 : 400,
+                      background: analyticsPeriod === p ? "#1a1a1a" : "#fff",
+                      color: analyticsPeriod === p ? "#fff" : "#6b7280",
+                      border: "none", cursor: "pointer", transition: "all 150ms",
+                    }}
+                  >
+                    {p} days
+                  </button>
+                ))}
+              </div>
+            </div>
+          </s-section>
+
+          {/* ATC Click Count — Main Metric */}
+          <s-section>
+            <div style={{
+              background: "#fdf4ff", borderRadius: 12, padding: "32px 20px", textAlign: "center",
+              border: "1px solid #f0abfc",
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: "#86198f", marginBottom: 8 }}>
+                Widget Add to Cart clicks
+              </div>
+              <div style={{ fontSize: 56, fontWeight: 700, color: "#701a75" }}>
+                {clicks.toLocaleString()}
+              </div>
+              <div style={{ fontSize: 13, color: "#86198f", marginTop: 8 }}>
+                in the last {analyticsPeriod} days
+              </div>
+            </div>
+          </s-section>
+
+          {/* Secondary: View Popup + View Detail */}
+          <s-section>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{
+                background: "#f0f9ff", borderRadius: 12, padding: "20px", textAlign: "center",
+                border: "1px solid #bae6fd",
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "#0369a1", marginBottom: 4 }}>Popup views</div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: "#0c4a6e" }}>{imp.toLocaleString()}</div>
+              </div>
+              <div style={{
+                background: "#ecfdf5", borderRadius: 12, padding: "20px", textAlign: "center",
+                border: "1px solid #86efac",
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "#166534", marginBottom: 4 }}>"View details" clicks</div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: "#14532d" }}>{viewDetail.toLocaleString()}</div>
+              </div>
+            </div>
+          </s-section>
+
+          {/* Recent Events (debug) */}
+          {analytics.recentEvents && analytics.recentEvents.length > 0 && (
+            <s-section heading="Recent events">
+              <div style={{ marginTop: 8 }}>
+                {analytics.recentEvents.map((e: { eventType: string; widgetType?: string | null; productId?: string | null; value?: number; createdAt: string }, i: number) => (
+                  <div key={i} style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "10px 16px", fontSize: 13,
+                    borderBottom: "1px solid #f3f4f6",
+                    background: i % 2 === 0 ? "#fff" : "#fafafa",
+                  }}>
+                    <span style={{ fontWeight: 600, color: e.eventType === "widget_atc" ? "#86198f" : "#0369a1" }}>
+                      {e.eventType}
+                    </span>
+                    <span style={{ color: "#6b7280" }}>{e.productId || "—"}</span>
+                    <span style={{ color: "#6b7280", fontSize: 12 }}>
+                      {new Date(e.createdAt).toLocaleString("vi-VN")}
+                    </span>
+                  </div>
+                ))}
               </div>
             </s-section>
-          ) : (
-            <>
-              {/* Period Toggle */}
-              <s-section>
-                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
-                  <div style={{
-                    display: "inline-flex", borderRadius: 8, border: "1px solid #e5e7eb", overflow: "hidden",
-                  }}>
-                    {(["7", "30"] as const).map((p) => (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => setAnalyticsPeriod(p)}
-                        style={{
-                          padding: "6px 16px", fontSize: 13, fontWeight: analyticsPeriod === p ? 600 : 400,
-                          background: analyticsPeriod === p ? "#1a1a1a" : "#fff",
-                          color: analyticsPeriod === p ? "#fff" : "#6b7280",
-                          border: "none", cursor: "pointer", transition: "all 150ms",
-                        }}
-                      >
-                        {p} ngày
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </s-section>
+          )}
 
-              {/* Big Numbers */}
-              <s-section>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-                  <div style={{
-                    background: "#f0f9ff", borderRadius: 12, padding: "24px 20px", textAlign: "center",
-                    border: "1px solid #bae6fd",
-                  }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: "#0369a1", marginBottom: 4 }}>Lượt hiển thị</div>
-                    <div style={{ fontSize: 36, fontWeight: 700, color: "#0c4a6e" }}>{imp.toLocaleString()}</div>
-                    <div style={{ fontSize: 12, color: "#0369a1", marginTop: 2 }}>impressions</div>
-                  </div>
-                  <div style={{
-                    background: "#fdf4ff", borderRadius: 12, padding: "24px 20px", textAlign: "center",
-                    border: "1px solid #f0abfc",
-                  }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: "#86198f", marginBottom: 4 }}>Add to Cart từ widget</div>
-                    <div style={{ fontSize: 36, fontWeight: 700, color: "#701a75" }}>{clicks.toLocaleString()}</div>
-                    <div style={{ fontSize: 12, color: "#86198f", marginTop: 2 }}>CTR: {ctr}%</div>
-                  </div>
-                  <div style={{
-                    background: "#ecfdf5", borderRadius: 12, padding: "24px 20px", textAlign: "center",
-                    border: "1px solid #86efac",
-                  }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: "#166534", marginBottom: 4 }}>Revenue Attributed</div>
-                    <div style={{ fontSize: 36, fontWeight: 700, color: "#14532d" }}>{formatRevenue(revenue)}</div>
-                    <div style={{ fontSize: 12, color: "#166534", marginTop: 2 }}>từ Add to Cart qua widget</div>
-                  </div>
-                </div>
-              </s-section>
-
-              {/* Top Products Table */}
-              <s-section heading="Top 5 sản phẩm được recommend">
-                {topProducts.length > 0 ? (
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{
-                      display: "grid", gridTemplateColumns: "1fr 120px 120px 100px",
-                      gap: 0, fontSize: 12, fontWeight: 600, color: "#6b7280",
-                      padding: "10px 16px", background: "#f9fafb", borderRadius: "8px 8px 0 0",
-                      borderBottom: "1px solid #e5e7eb",
-                    }}>
-                      <span>Sản phẩm</span>
-                      <span style={{ textAlign: "right" }}>Recommend</span>
-                      <span style={{ textAlign: "right" }}>Click</span>
-                      <span style={{ textAlign: "right" }}>CTR</span>
-                    </div>
-                    {topProducts.map((p, i) => {
-                      const productCtr = p.impressions > 0 ? ((p.clicks / p.impressions) * 100).toFixed(1) : "0.0";
-                      return (
-                        <div key={i} style={{
-                          display: "grid", gridTemplateColumns: "1fr 120px 120px 100px",
-                          gap: 0, fontSize: 13, padding: "12px 16px",
-                          borderBottom: "1px solid #f3f4f6",
-                          background: i % 2 === 0 ? "#fff" : "#fafafa",
-                        }}>
-                          <span style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            Product #{p.productId}
-                          </span>
-                          <span style={{ textAlign: "right", color: "#0369a1", fontWeight: 600 }}>{p.impressions}</span>
-                          <span style={{ textAlign: "right", color: "#86198f", fontWeight: 600 }}>{p.clicks}</span>
-                          <span style={{ textAlign: "right", fontWeight: 600, color: parseFloat(productCtr) > 5 ? "#059669" : "#6b7280" }}>
-                            {productCtr}%
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div style={{ padding: "24px 16px", textAlign: "center", color: "#6b7280", fontSize: 13 }}>
-                    Chưa có dữ liệu sản phẩm trong {analyticsPeriod} ngày qua
-                  </div>
-                )}
-              </s-section>
-            </>
+          {clicks === 0 && imp === 0 && (
+            <s-section>
+              <div style={{
+                textAlign: "center", padding: "40px 20px", color: "#6b7280", fontSize: 14,
+              }}>
+                <p style={{ margin: "0 0 12px" }}>No data yet. Try clicking "Add to cart" from the widget on the storefront.</p>
+              </div>
+            </s-section>
           )}
         </>
       )}
@@ -523,14 +511,14 @@ export default function SmartRecDashboard() {
             {/* Left: Controls */}
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
 
-              {/* Màu sắc */}
+              {/* Colors */}
               <div>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Màu sắc</div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Colors</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {([
-                    { key: "styleAccentColor" as const, label: "Màu nút (View / Add to Cart)" },
-                    { key: "styleTextColor" as const, label: "Màu chữ tiêu đề sản phẩm" },
-                    { key: "styleBgColor" as const, label: "Màu nền card" },
+                    { key: "styleAccentColor" as const, label: "Button color (View / Add to Cart)" },
+                    { key: "styleTextColor" as const, label: "Product title text color" },
+                    { key: "styleBgColor" as const, label: "Card background color" },
                   ]).map((c) => (
                     <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 12 }}>
                       <input
@@ -549,9 +537,9 @@ export default function SmartRecDashboard() {
                 </div>
               </div>
 
-              {/* Bo góc */}
+              {/* Border radius */}
               <div>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Bo góc</div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Border Radius</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <input
                     type="range" min="0" max="20"
@@ -566,19 +554,19 @@ export default function SmartRecDashboard() {
                   </span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
-                  <span>0px (vuông)</span>
-                  <span>20px (tròn)</span>
+                  <span>0px (square)</span>
+                  <span>20px (round)</span>
                 </div>
               </div>
 
-              {/* Kiểu nút */}
+              {/* Button style */}
               <div>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Kiểu nút</div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Button Style</div>
                 <div style={{ display: "flex", gap: 8 }}>
                   {([
-                    { id: "filled", label: "Filled", desc: "Nút đặc" },
-                    { id: "outline", label: "Outlined", desc: "Nút viền" },
-                    { id: "text", label: "Text only", desc: "Chữ + underline" },
+                    { id: "filled", label: "Filled", desc: "Solid button" },
+                    { id: "outline", label: "Outlined", desc: "Border only" },
+                    { id: "text", label: "Text only", desc: "Text + underline" },
                   ] as const).map((s) => (
                     <button
                       key={s.id}
@@ -613,9 +601,9 @@ export default function SmartRecDashboard() {
                 </div>
               </div>
 
-              {/* Tiêu đề widget */}
+              {/* Widget title */}
               <div>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Tiêu đề widget</div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Widget Title</div>
                 <input
                   type="text"
                   value={widgetTitle}
@@ -634,12 +622,12 @@ export default function SmartRecDashboard() {
 
               {/* Custom CSS */}
               <div>
-                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Custom CSS (nâng cao)</div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Custom CSS (advanced)</div>
                 <textarea
                   value={widgetStyles.styleCustomCSS}
                   onChange={(e) => setWidgetStyles((p) => ({ ...p, styleCustomCSS: e.target.value }))}
                   disabled={!enabled}
-                  placeholder={`.sr-widget { /* CSS tùy chỉnh */ }`}
+                  placeholder={`.sr-widget { /* custom CSS */ }`}
                   style={{
                     width: "100%", minHeight: 80, fontSize: 12, fontFamily: "monospace",
                     padding: 12, borderRadius: 8, border: "1px solid #d1d5db",
@@ -702,13 +690,13 @@ export default function SmartRecDashboard() {
                               background: "transparent", color: widgetStyles.styleAccentColor,
                               border: "none", textDecoration: "underline", padding: "6px 4px",
                             }),
-                          }}>Thêm vào giỏ</button>
+                          }}>Add to cart</button>
                           <button type="button" style={{
                             padding: "6px 14px", fontSize: widgetStyles.styleFontSize - 2, fontWeight: 500,
                             borderRadius: Math.min(widgetStyles.styleBorderRadius, 6), cursor: "default",
                             background: "transparent", color: widgetStyles.styleTextColor,
                             border: "1px solid rgba(0,0,0,0.12)",
-                          }}>Xem chi tiết</button>
+                          }}>View details</button>
                         </div>
                       </div>
                     </div>
@@ -729,12 +717,12 @@ export default function SmartRecDashboard() {
                     <div style={{ fontWeight: 600, fontSize: widgetStyles.styleFontSize - 2, marginBottom: 4 }}>Classic Cotton Tee</div>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: widgetStyles.styleFontSize - 2 }}>
                       <span style={{ color: "#f59e0b" }}>★★★★★</span>
-                      <span style={{ opacity: 0.6 }}>234 đánh giá</span>
+                      <span style={{ opacity: 0.6 }}>234 reviews</span>
                       <span style={{ opacity: 0.3 }}>·</span>
                       <span style={{
                         padding: "1px 8px", fontSize: widgetStyles.styleFontSize - 3,
                         background: "rgba(16,185,129,0.1)", color: "#059669", borderRadius: 99,
-                      }}>↩ Đổi trả miễn phí</span>
+                      }}>↩ Free returns</span>
                     </div>
                   </div>
                 </div>
@@ -745,19 +733,19 @@ export default function SmartRecDashboard() {
       )}
 
       {/* Setup Guide (sidebar) */}
-      <s-section slot="aside" heading="Hướng dẫn">
+            <s-section slot="aside" heading="Guide">
         <s-stack direction="block" gap="base">
           <s-box padding="base" borderWidth="base" borderRadius="base">
-            <s-text fontWeight="bold">1. Bật SmartRec</s-text>
-            <s-text>Toggle ở banner phía trên</s-text>
+<s-text fontWeight="bold">1. Enable SmartRec</s-text>
+              <s-text>Toggle the banner above</s-text>
           </s-box>
           <s-box padding="base" borderWidth="base" borderRadius="base">
-            <s-text fontWeight="bold">2. Cài Theme Extension</s-text>
-            <s-text>Online Store → Themes → Customize → App embeds → bật "SmartRec Tracker"</s-text>
+<s-text fontWeight="bold">2. Install Theme Extension</s-text>
+              <s-text>Online Store → Themes → Customize → App embeds → enable "SmartRec Tracker"</s-text>
           </s-box>
           <s-box padding="base" borderWidth="base" borderRadius="base">
             <s-text fontWeight="bold">3. Save & Test</s-text>
-            <s-text>Save theme, mở storefront, xem Console (F12) để check logs</s-text>
+            <s-text>Save theme, open storefront, check Console (F12) for logs</s-text>
           </s-box>
         </s-stack>
       </s-section>

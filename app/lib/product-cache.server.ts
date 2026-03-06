@@ -53,3 +53,4 @@ export interface CachedProduct {
 
 export const productCache = new MemoryCache<CachedProduct>();
 export const productListCache = new MemoryCache<CachedProduct[]>();
+export const shopPolicyCache = new MemoryCache<{ hasReturnPolicy: boolean }>();

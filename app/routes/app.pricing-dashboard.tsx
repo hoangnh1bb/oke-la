@@ -182,8 +182,8 @@ export default function PricingDashboard() {
             marginBottom: "24px",
             lineHeight: "1.8"
           }}>
-            <li>✅ <strong>Không giới hạn</strong> tương tác</li>
-            <li>✅ Dùng thử 7 ngày miễn phí</li>
+            <li>✅ <strong>Unlimited</strong> interactions</li>
+            <li>✅ 7-day free trial</li>
             <li>✅ Analytics dashboard</li>
             <li>✅ Top 10 products</li>
             <li>✅ Appearance customization</li>
@@ -279,7 +279,7 @@ export default function PricingDashboard() {
               <p style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "12px" }}>$5/month</p>
               <ul style={{ fontSize: "14px", lineHeight: "1.6", marginBottom: "16px" }}>
                 <li>Per-widget colors</li>
-                <li>Style nút (solid/outline)</li>
+                <li>Button style (solid/outline)</li>
                 <li>Custom text</li>
                 <li>Live preview</li>
               </ul>
@@ -306,9 +306,9 @@ export default function PricingDashboard() {
               <h3 style={{ fontSize: "18px", marginBottom: "8px" }}>📊 Analytics Pro</h3>
               <p style={{ fontSize: "24px", fontWeight: "bold", marginBottom: "12px" }}>$7/month</p>
               <ul style={{ fontSize: "14px", lineHeight: "1.6", marginBottom: "16px" }}>
-                <li>Revenue analysis chi tiết</li>
+                <li>Detailed revenue analysis</li>
                 <li>7-day trend charts</li>
-                <li>Top sản phẩm theo tương tác</li>
+                <li>Top products by interactions</li>
                 <li>Order tracking</li>
               </ul>
               {hasAnalyticsPro ? (

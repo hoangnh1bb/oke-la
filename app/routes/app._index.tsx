@@ -11,8 +11,8 @@ export default function Index() {
   return (
     <s-page heading="SmartRec Dashboard">
       <s-section heading="Status">
-        <s-paragraph>SmartRec đang chạy trên store của bạn.</s-paragraph>
-        <s-link href="/app/onboarding">Mở Onboarding wizard →</s-link>
+        <s-paragraph>SmartRec is running on your store.</s-paragraph>
+        <s-link href="/app/onboarding">Open Onboarding wizard →</s-link>
       </s-section>
     </s-page>
   );

@@ -56,10 +56,15 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return data({ error: "Invalid JSON" }, { status: 400 });
   }
 
+  console.log("[SmartRec] Proxy action:", subpath, "shop:", shop, "body:", JSON.stringify(body));
+
   try {
     switch (subpath) {
-      case "track":
-        return handleTrack(body, shop);
+      case "track": {
+        const result = await handleTrack(body, shop);
+        console.log("[SmartRec] Track result:", JSON.stringify(result));
+        return result;
+      }
       case "intent":
         return handleIntent(body, proxy.admin!, shop);
       default:
@@ -67,6 +72,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     }
   } catch (e) {
     console.error("[SmartRec] Proxy action error:", e);
-    return data({ type: "none" });
+    return data({ error: "Server error", detail: String(e) }, { status: 500 });
   }
 };

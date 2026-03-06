@@ -74,7 +74,7 @@
 
   function createDismissButton(widgetType, container) {
     var btn = createElement('button', 'sr-dismiss', {
-      'aria-label': 'Đóng',
+      'aria-label': 'Close',
       'type': 'button'
     });
     btn.innerHTML = '&#x2715;';
@@ -311,12 +311,40 @@
     return !!(window.Shopify && window.Shopify.designMode);
   }
 
-  function refreshCartUI() {
+  function getSectionIds() {
+    var ids = [];
+    var candidates = ['cart-notification-product','cart-notification-button','cart-icon-bubble','cart-drawer','cart-notification','main-cart-items','cart-live-region-text'];
+    for (var i = 0; i < candidates.length; i++) {
+      if (document.getElementById('shopify-section-' + candidates[i])) ids.push(candidates[i]);
+    }
+    return ids;
+  }
+
+  function updateSections(sections) {
+    if (!sections) return;
+    var keys = Object.keys(sections);
+    for (var i = 0; i < keys.length; i++) {
+      var el = document.getElementById('shopify-section-' + keys[i]);
+      if (el && sections[keys[i]]) {
+        try {
+          el.innerHTML = new DOMParser()
+            .parseFromString(sections[keys[i]], 'text/html')
+            .querySelector('.shopify-section').innerHTML;
+        } catch(e) {
+          el.innerHTML = sections[keys[i]];
+        }
+      }
+    }
+  }
+
+  function refreshCartUI(atcSections) {
+    if (atcSections) updateSections(atcSections);
+
     fetch(shopifyRoot() + 'cart.js', { headers: { 'Accept': 'application/json' } })
     .then(function(r) { return r.json(); })
     .then(function(cart) {
       var countEls = document.querySelectorAll(
-        '.cart-count-bubble span, [data-cart-count], .cart-count, .js-cart-count, #cart-icon-bubble span'
+        '.cart-count-bubble span, [data-cart-count], .cart-count, .js-cart-count, #cart-icon-bubble span, .header__cart-count'
       );
       for (var j = 0; j < countEls.length; j++) countEls[j].textContent = cart.item_count;
       var bubbles = document.querySelectorAll('.cart-count-bubble');
@@ -324,79 +352,88 @@
         if (cart.item_count > 0) bubbles[k].removeAttribute('hidden');
       }
       try {
-        document.documentElement.dispatchEvent(
-          new CustomEvent('cart:refresh', { bubbles: true, detail: { cart: cart } })
-        );
+        document.documentElement.dispatchEvent(new CustomEvent('cart:refresh', { bubbles: true, detail: { cart: cart } }));
+        document.documentElement.dispatchEvent(new CustomEvent('cart:change', { bubbles: true, detail: { cart: cart } }));
       } catch(e) {}
     }).catch(function() {});
 
-    var cn = document.querySelector('cart-notification');
-    if (cn) {
-      if (typeof cn.open === 'function') { cn.open(); }
-      else { cn.classList.add('animate', 'active'); cn.removeAttribute('hidden'); }
-    }
-
     var cd = document.querySelector('cart-drawer');
     if (cd) {
-      if (typeof cd.open === 'function') { cd.open(); }
-      else { cd.classList.add('active', 'is-open'); var det = cd.querySelector('details'); if (det) det.setAttribute('open', ''); }
+      if (typeof cd.renderContents === 'function') {
+        fetch(shopifyRoot() + '?sections=cart-drawer')
+        .then(function(r) { return r.json(); })
+        .then(function(s) {
+          var html = s['cart-drawer'];
+          if (html) {
+            try {
+              var parsed = new DOMParser().parseFromString(html, 'text/html');
+              var newInner = parsed.querySelector('cart-drawer');
+              if (newInner) cd.innerHTML = newInner.innerHTML;
+            } catch(e) {}
+          }
+          if (typeof cd.open === 'function') cd.open();
+        }).catch(function() {});
+      } else {
+        cd.classList.add('active', 'is-open');
+        var det = cd.querySelector('details');
+        if (det) det.setAttribute('open', '');
+      }
     }
 
-    fetch(shopifyRoot() + '?sections=cart-notification-product,cart-notification-button,cart-icon-bubble,cart-drawer')
-    .then(function(r) { return r.json(); })
-    .then(function(sections) {
-      var keys = Object.keys(sections);
-      for (var i = 0; i < keys.length; i++) {
-        var el = document.getElementById('shopify-section-' + keys[i]);
-        if (el && sections[keys[i]]) {
-          var tmp = document.createElement('div');
-          tmp.innerHTML = sections[keys[i]];
-          var inner = tmp.querySelector('.shopify-section');
-          el.innerHTML = inner ? inner.innerHTML : sections[keys[i]];
-        }
-      }
-    }).catch(function() {});
-
-    try { document.dispatchEvent(new CustomEvent('cart:updated')); } catch(e) {}
+    var cn = document.querySelector('cart-notification');
+    if (cn) {
+      fetch(shopifyRoot() + '?sections=cart-notification-product,cart-notification-button')
+      .then(function(r) { return r.json(); })
+      .then(function(s) {
+        updateSections(s);
+        if (typeof cn.open === 'function') { cn.open(); }
+        else { cn.classList.add('animate', 'active'); cn.removeAttribute('hidden'); }
+      }).catch(function() {
+        if (typeof cn.open === 'function') { cn.open(); }
+        else { cn.classList.add('animate', 'active'); cn.removeAttribute('hidden'); }
+      });
+    }
   }
 
   function addToCart(variantId, btn, closePopupFn, widgetType, productId, productPrice) {
-    if (!variantId) { btn.textContent = 'Không có variant'; return; }
+    if (!variantId) { btn.textContent = 'No variant'; return; }
 
     if (isThemeEditor()) {
-      btn.textContent = '✓ Đã thêm (preview)';
+      btn.textContent = '✓ Added (preview)';
       btn.style.background = '#059669'; btn.style.borderColor = '#059669'; btn.style.color = '#fff';
       setTimeout(function() {
-        btn.textContent = 'Thêm vào giỏ';
+        btn.textContent = 'Add to cart';
         btn.style.background = ''; btn.style.borderColor = ''; btn.style.color = '';
       }, 1500);
       return;
     }
 
     var origText = btn.textContent;
-    btn.textContent = 'Đang thêm...';
+    btn.textContent = 'Adding...';
     btn.disabled = true;
 
-    var formData = new FormData();
-    formData.append('id', variantId);
-    formData.append('quantity', '1');
+    var sectionIds = getSectionIds();
+    var payload = { items: [{ id: parseInt(variantId, 10), quantity: 1 }] };
+    if (sectionIds.length > 0) payload.sections = sectionIds.join(',');
 
     fetch(shopifyRoot() + 'cart/add.js', {
       method: 'POST',
-      body: formData
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload)
     }).then(function(res) {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      if (!res.ok) return res.json().then(function(e) { throw new Error(e.description || 'HTTP ' + res.status); });
       return res.json();
-    }).then(function(item) {
-      btn.textContent = '✓ Đã thêm';
+    }).then(function(data) {
+      btn.textContent = '✓ Added';
       btn.style.background = '#059669';
       btn.style.borderColor = '#059669';
       btn.style.color = '#fff';
 
-      refreshCartUI();
+      refreshCartUI(data.sections);
       if (closePopupFn) closePopupFn();
 
       try {
+        var item = data.items ? data.items[0] : data;
         var atcValue = 0;
         if (productPrice) {
           atcValue = parseFloat(String(productPrice).replace(/[^\d.]/g, '')) || 0;
@@ -404,7 +441,7 @@
           atcValue = item.price;
         }
         trackEvent('widget_atc', widgetType || 'alternative_nudge', productId || item.product_id, atcValue);
-      } catch(e) { /* tracking must never break ATC */ }
+      } catch(e) {}
 
       setTimeout(function() {
         btn.textContent = origText;
@@ -415,7 +452,7 @@
       }, 2500);
     }).catch(function(err) {
       console.error('[SmartRec] ATC error:', err);
-      btn.textContent = 'Lỗi — thử lại';
+      btn.textContent = err.message || 'Error — retry';
       btn.disabled = false;
       setTimeout(function() { btn.textContent = origText; btn.disabled = false; }, 3000);
     });
@@ -498,7 +535,7 @@
     // Trigger button (inline, shows mini preview)
     var trigger = createElement('div', 'sr-widget sr-alt-trigger', {
       'role': 'button', 'tabindex': '0',
-      'aria-label': 'Xem gợi ý sản phẩm'
+      'aria-label': 'View product suggestions'
     });
 
     var thumbs = createElement('div', 'sr-alt-trigger__thumbs');
@@ -513,7 +550,7 @@
     var triggerLabel = createElement('p', 'sr-alt-trigger__label');
     triggerLabel.textContent = 'Product Recommendations';
     var triggerHint = createElement('p', 'sr-alt-trigger__hint');
-    triggerHint.textContent = products.length + ' sản phẩm tương tự — bấm để xem';
+    triggerHint.textContent = products.length + ' similar products — tap to view';
     triggerText.appendChild(triggerLabel);
     triggerText.appendChild(triggerHint);
 
@@ -533,12 +570,12 @@
     title.textContent = 'Product Recommendations';
 
     var subtitle = createElement('p', 'sr-alt-popup__subtitle');
-    subtitle.textContent = 'Khách hàng tương tự cũng xem những sản phẩm này.';
+    subtitle.textContent = 'Products you recently viewed';
 
     popup.appendChild(title);
     popup.appendChild(subtitle);
 
-    var closeBtn = createElement('button', 'sr-dismiss', { 'aria-label': 'Đóng', 'type': 'button' });
+    var closeBtn = createElement('button', 'sr-dismiss', { 'aria-label': 'Close', 'type': 'button' });
     closeBtn.innerHTML = '&#x2715;';
     popup.appendChild(closeBtn);
 
@@ -560,7 +597,7 @@
       var actions = createElement('div', 'sr-alt-popup__actions');
 
       var atcBtn = createElement('button', 'sr-alt-popup__atc', { 'type': 'button' });
-      atcBtn.textContent = 'Thêm vào giỏ';
+      atcBtn.textContent = 'Add to cart';
       (function(vid, el, pid, pprice) {
         el.addEventListener('click', function(e) {
           e.stopPropagation();
@@ -569,7 +606,12 @@
       })(product.variant_id, atcBtn, product.id, product.price);
 
       var viewBtn = createElement('a', 'sr-alt-popup__view', { 'href': product.url || '#' });
-      viewBtn.textContent = 'Xem chi tiết';
+      viewBtn.textContent = 'View details';
+      (function(pid) {
+        viewBtn.addEventListener('click', function() {
+          trackEvent('view_detail', 'alternative_nudge', pid, 0);
+        });
+      })(product.id);
 
       actions.appendChild(atcBtn);
       actions.appendChild(viewBtn);
@@ -602,7 +644,11 @@
     });
     closeBtn.addEventListener('click', closePopup);
     overlay.addEventListener('click', function(e) {
-      if (e.target === overlay) closePopup();
+      var popup = overlay.querySelector('.sr-alt-popup');
+      if (popup && !popup.contains(e.target)) closePopup();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && overlay.classList.contains('sr-alt-overlay--open')) closePopup();
     });
 
     if (anchor.id === 'sr-product-block') {
@@ -691,7 +737,7 @@
     }
 
     var cta = createElement('button', 'sr-compare-bar__cta', { 'type': 'button' });
-    cta.textContent = 'So sánh';
+    cta.textContent = 'Compare';
 
     bar.appendChild(thumb);
     bar.appendChild(name);
@@ -709,11 +755,11 @@
     var panel = createElement('div', 'sr-widget sr-compare-panel');
 
     var panelTitle = createElement('p', 'sr-compare-panel__title');
-    panelTitle.textContent = 'So sánh sản phẩm';
+    panelTitle.textContent = 'Compare products';
     panel.appendChild(panelTitle);
 
     var panelDismiss = createElement('button', 'sr-dismiss', {
-      'aria-label': 'Đóng', 'type': 'button'
+      'aria-label': 'Close', 'type': 'button'
     });
     panelDismiss.innerHTML = '&#x2715;';
     panel.appendChild(panelDismiss);
@@ -736,14 +782,14 @@
 
       var pRating = createElement('p', 'sr-compare-panel__rating');
       if (product.rating) {
-        pRating.setAttribute('aria-label', product.rating + ' trên 5 sao');
+        pRating.setAttribute('aria-label', product.rating + ' out of 5 stars');
         pRating.textContent = renderStars(product.rating) + ' (' + (product.review_count || 0) + ' reviews)';
       } else if (product.review_count) {
         pRating.textContent = product.review_count + ' reviews';
       }
 
       var pLink = createElement('a', 'sr-compare-panel__link', { 'href': product.url || '#' });
-      pLink.textContent = 'Xem sản phẩm';
+      pLink.textContent = 'View product';
 
       card.appendChild(pImg);
       card.appendChild(pName);
@@ -816,14 +862,14 @@
     var tags = data.tags.slice(0, 4);
     var panel = createElement('div', 'sr-widget sr-tag-nav', {
       'role': 'complementary',
-      'aria-label': 'Gợi ý tìm kiếm'
+      'aria-label': 'Search suggestions'
     });
 
     var title = createElement('p', 'sr-tag-nav__title');
-    title.textContent = 'Vẫn đang tìm kiếm?';
+    title.textContent = 'Still looking?';
 
     var subtitle = createElement('p', 'sr-tag-nav__subtitle');
-    subtitle.textContent = 'Thử lọc theo:';
+    subtitle.textContent = 'Try filtering by:';
 
     panel.appendChild(title);
     panel.appendChild(subtitle);
@@ -885,7 +931,7 @@
 
     var container = createElement('div', 'sr-widget sr-trust-nudge', {
       'role': 'complementary',
-      'aria-label': 'Thông tin sản phẩm'
+      'aria-label': 'Product info'
     });
 
     container.appendChild(createDismissButton('trust_nudge', container));
@@ -902,7 +948,7 @@
 
       if (item.rating) {
         var stars = createElement('span', 'sr-trust-nudge__stars', {
-          'aria-label': item.rating + ' trên 5 sao',
+          'aria-label': item.rating + ' out of 5 stars',
           'role': 'img'
         });
         stars.textContent = renderStars(item.rating);
@@ -911,7 +957,7 @@
 
       if (item.review_count > 0) {
         var reviews = createElement('span', 'sr-trust-nudge__reviews');
-        reviews.textContent = item.review_count + ' đánh giá';
+        reviews.textContent = item.review_count + ' reviews';
         meta.appendChild(reviews);
       }
 
@@ -922,7 +968,7 @@
           meta.appendChild(sep);
         }
         var badge = createElement('span', 'sr-trust-nudge__badge');
-        badge.textContent = '↩ Đổi trả miễn phí 30 ngày';
+        badge.textContent = '↩ Free 30-day returns';
         meta.appendChild(badge);
       }
 

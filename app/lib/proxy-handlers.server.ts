@@ -234,8 +234,8 @@ async function fetchShopPolicies(
     const responseJson = await response.json();
     const body = (responseJson.data?.shop?.refundPolicy?.body || "").toLowerCase();
     const hasFreeReturn =
-      body.includes("miễn phí") ||
       body.includes("free") ||
+      body.includes("miễn phí") ||
       body.includes("không mất phí");
     const policies = { hasFreeReturn };
     shopPolicyCache.set(cacheKey, policies, 24 * 60 * 60 * 1000);
@@ -278,7 +278,13 @@ export async function handleTrack(body: unknown, shop: string) {
     metadata?: string;
   };
 
+  console.log("[SmartRec] handleTrack called — shop:", shop, "eventType:", req.eventType, "productId:", req.productId);
+
   if (!req.eventType) return { ok: false, error: "eventType required" };
+  if (!shop) {
+    console.error("[SmartRec] handleTrack — shop is empty!");
+    return { ok: false, error: "shop required" };
+  }
 
   await db.smartRecEvent.create({
     data: {
@@ -339,13 +345,13 @@ export async function handleIntent(
       if (!isNaN(priceA) && !isNaN(priceB) && priceA !== priceB) {
         const cheaper = priceA < priceB ? productA : productB;
         const diff = Math.abs(priceA - priceB);
-        diffPoints.push(`${cheaper.title.slice(0, 20)} rẻ hơn ${diff.toLocaleString("vi-VN")}₫`);
+        diffPoints.push(`${cheaper.title.slice(0, 20)} cheaper by ${diff.toLocaleString()}`);
       }
 
       if (productA.rating && productB.rating && productA.rating !== productB.rating) {
         const better = productA.rating > productB.rating ? productA : productB;
         const ratingDiff = Math.abs(productA.rating - productB.rating).toFixed(1);
-        diffPoints.push(`${better.title.slice(0, 20)} rating cao hơn ${ratingDiff}★`);
+        diffPoints.push(`${better.title.slice(0, 20)} rated ${ratingDiff}★ higher`);
       }
 
       return {
@@ -515,7 +521,7 @@ export async function handleConfig(params: URLSearchParams, shopOverride?: strin
       fontSize: 14,
       buttonStyle: "filled",
       customCSS: "",
-      widgetTitle: "Không chắc chắn? Khách hàng tương tự cũng xem những sản phẩm này.",
+      widgetTitle: "Not sure? Similar customers also viewed these products.",
     },
   };
 }
