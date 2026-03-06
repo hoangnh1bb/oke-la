@@ -72,7 +72,7 @@ model AddonSubscription {
 model ShopConfig {
   shopId        String   @id
   primaryColor  String   @default("#4A90E2")
-  headlineText  String   @default("Bạn có thể thích")
+  headlineText  String   @default("You may also like")
   widgetColors  String?  // JSON
   widgetTexts   String?  // JSON
   buttonStyle   String   @default("solid")
@@ -98,7 +98,7 @@ model SmartRecSettings {
   alternativeNudge      Boolean  @default(true)
   comparisonBar         Boolean  @default(true)
   tagNavigator          Boolean  @default(true)
-  trustNudge            Boolean  @default(true)
+  trustNudge            Boolean  @default(false)
   thresholdBrowsing     Int      @default(30)
   thresholdConsidering  Int      @default(55)
   thresholdHighIntent   Int      @default(75)
@@ -107,8 +107,17 @@ model SmartRecSettings {
   ucHesitationMin       Int      @default(56)
   ucHesitationMax       Int      @default(89)
   ucLostBackNavMin      Int      @default(3)
-  ucCartHesitationSec   Int      @default(60)
   maxAlternatives       Int      @default(2)
+  // Widget style customization
+  styleAccentColor      String   @default("#000000")
+  styleTextColor        String   @default("#1a1a1a")
+  styleBgColor          String   @default("#ffffff")
+  styleBorderRadius     Int      @default(8)
+  styleFontSize         Int      @default(14)
+  styleButtonStyle      String   @default("filled")
+  stylePosition         String   @default("default")
+  styleCustomCSS        String   @default("")
+  widgetTitle           String   @default("Not sure? Similar customers also viewed these products.")
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }
@@ -133,10 +142,12 @@ model SmartRecEvent {
   productId  String?
   sessionId  String?
   intentScore Int?
+  value      Float    @default(0)
   metadata   String?
   createdAt  DateTime @default(now())
 
   @@index([shop, createdAt])
+  @@index([shop, eventType, createdAt])
   @@index([shop, widgetType])
 }
 

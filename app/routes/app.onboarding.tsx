@@ -18,8 +18,8 @@ type OnboardingApiData = {
 
 function StepIndicator({ current }: { current: WizardStep }) {
   const steps = [
-    { n: 1, label: "Chọn tính năng" },
-    { n: 2, label: "Xem thử" },
+    { n: 1, label: "Choose features" },
+    { n: 2, label: "Preview" },
     { n: 3, label: "Go live" },
   ];
   return (
@@ -95,10 +95,10 @@ function Step1({
   const enabledCount = Object.values(widgets).filter(Boolean).length;
 
   return (
-    <s-page heading="Chào mừng đến với SmartRec 👋">
-      <s-section heading="Bước 1/3 — Chọn tính năng bạn muốn bật">
+    <s-page heading="Welcome to SmartRec 👋">
+      <s-section heading="Step 1/3 — Choose features to enable">
         <s-paragraph>
-          Tất cả tính năng đều bật mặc định. Tắt những cái bạn không cần.
+          All features are enabled by default. Turn off the ones you don't need.
         </s-paragraph>
 
         <s-stack direction="block" gap="base">
@@ -125,7 +125,7 @@ function Step1({
                   }
                   onClick={() => onToggle(w.id as WidgetId)}
                 >
-                  {widgets[w.id as WidgetId] ? "Bật" : "Tắt"}
+                  {widgets[w.id as WidgetId] ? "On" : "Off"}
                 </s-button>
               </div>
             </s-box>
@@ -134,7 +134,7 @@ function Step1({
 
         {enabledCount === 0 && (
           <s-paragraph tone="critical">
-            Vui lòng bật ít nhất 1 tính năng để tiếp tục.
+            Please enable at least 1 feature to continue.
           </s-paragraph>
         )}
 
@@ -144,7 +144,7 @@ function Step1({
             onClick={onNext}
             {...(enabledCount === 0 ? { disabled: true } : {})}
           >
-            Tiếp theo →
+            Next →
           </s-button>
         </s-stack>
       </s-section>
@@ -220,10 +220,9 @@ function Step2({
         }}
       >
         <s-stack direction="block" gap="base">
-          <s-heading>Bước 2/3 — Xem thử trên store</s-heading>
+          <s-heading>Step 2/3 — Preview on your store</s-heading>
           <s-paragraph>
-            Click &quot;Xem thử&quot; để preview từng widget trực tiếp trên store
-            của bạn.
+            Click &quot;Preview&quot; to see each widget live on your store.
           </s-paragraph>
 
           {isLoading && <s-spinner />}
@@ -244,7 +243,7 @@ function Step2({
                   onClick={() => sendPreview(w.id as WidgetId)}
                   {...(!iframeReady || isLoading ? { disabled: true } : {})}
                 >
-                  {activePreview === w.id ? "✓ Đang hiển thị" : "Xem thử"}
+                  {activePreview === w.id ? "✓ Showing" : "Preview"}
                 </s-button>
               </s-stack>
             </s-box>
@@ -258,15 +257,15 @@ function Step2({
               borderRadius="base"
             >
             <s-text tone="neutral">
-              {w.icon} {w.name} — Đã tắt
+              {w.icon} {w.name} — Disabled
             </s-text>
             </s-box>
           ))}
 
           <s-stack direction="inline" gap="base">
-            <s-button onClick={onBack}>← Quay lại</s-button>
+            <s-button onClick={onBack}>← Back</s-button>
             <s-button variant="primary" onClick={onNext}>
-              Tiếp theo →
+              Next →
             </s-button>
           </s-stack>
         </s-stack>
@@ -288,13 +287,13 @@ function Step2({
               zIndex: 2,
             }}
           >
-            <s-paragraph>Không thể tải store preview.</s-paragraph>
+            <s-paragraph>Unable to load store preview.</s-paragraph>
             <s-text tone="neutral">
-              Store của bạn có thể đang bật password. Bạn vẫn có thể tiếp tục
+              Your store may have password protection enabled. You can still continue
               setup.
             </s-text>
             <s-button onClick={onNext} variant="primary">
-              Bỏ qua và Tiếp tục →
+              Skip and Continue →
             </s-button>
           </div>
         )}
@@ -313,9 +312,9 @@ function Step2({
             }}
           >
             <s-spinner />
-            <s-text>Đang tải store của bạn...</s-text>
+            <s-text>Loading your store...</s-text>
             <s-text tone="neutral">
-              (Lần đầu có thể mất 5–10 giây)
+              (First load may take 5–10 seconds)
             </s-text>
           </div>
         )}
@@ -375,23 +374,22 @@ function Step3({
 
   if (done) {
     return (
-      <s-page heading="SmartRec đang chạy! 🎉">
+      <s-page heading="SmartRec is running! 🎉">
         <s-section>
           <s-stack direction="block" gap="base">
             <div style={{ fontSize: 64 }}>✅</div>
             <s-heading>
-              Xong! SmartRec đang chạy trên store của bạn.
+              Done! SmartRec is running on your store.
             </s-heading>
             <s-paragraph>
-              {enabledCount}/4 tính năng đã được bật. Bạn có thể thay đổi bất cứ
-              lúc nào trong phần Cài đặt.
+              {enabledCount}/4 features enabled. You can change this anytime in Settings.
             </s-paragraph>
             <s-stack direction="inline" gap="base">
               <s-link href="/app">Xem Dashboard →</s-link>
-              <s-link href="/app/additional">Cài đặt</s-link>
+              <s-link href="/app/additional">Settings</s-link>
             </s-stack>
             <s-text tone="neutral">
-              Đang chuyển đến dashboard...
+              Redirecting to dashboard...
             </s-text>
           </s-stack>
         </s-section>
@@ -400,11 +398,11 @@ function Step3({
   }
 
   return (
-    <s-page heading="Bước 3/3 — Go live">
-      <s-section heading="Tóm tắt cấu hình">
+    <s-page heading="Step 3/3 — Go live">
+      <s-section heading="Configuration summary">
         <s-stack direction="block" gap="base">
           <s-paragraph>
-            Bạn đã chọn bật <strong>{enabledCount}/4</strong> tính năng.
+            You've chosen to enable <strong>{enabledCount}/4</strong> features.
           </s-paragraph>
 
           <s-stack direction="block" gap="base">
@@ -414,7 +412,7 @@ function Step3({
                   {w.icon} {w.name}
                 </s-text>
                 <s-badge tone={widgets[w.id as WidgetId] ? "success" : "neutral"}>
-                  {widgets[w.id as WidgetId] ? "Bật" : "Tắt"}
+                  {widgets[w.id as WidgetId] ? "On" : "Off"}
                 </s-badge>
               </div>
             ))}
@@ -423,14 +421,14 @@ function Step3({
           <s-box padding="base" borderRadius="base">
             <s-stack direction="block" gap="base">
               <s-text>
-                Chuyện gì sẽ xảy ra khi bạn click?
+                What happens when you click?
               </s-text>
               <s-unordered-list>
-                <s-list-item>Cài đặt của bạn được lưu lại</s-list-item>
+                <s-list-item>Your settings are saved</s-list-item>
                 <s-list-item>
-                  SmartRec script được nhúng vào storefront
+                  SmartRec script is embedded in your storefront
                 </s-list-item>
-                <s-list-item>Widgets bắt đầu hoạt động ngay lập tức</s-list-item>
+                <s-list-item>Widgets start working immediately</s-list-item>
               </s-unordered-list>
             </s-stack>
           </s-box>
@@ -441,7 +439,7 @@ function Step3({
               onClick={goLive}
               {...(isSubmitting ? { loading: true } : {})}
             >
-              {isSubmitting ? "Đang xử lý..." : "🚀 Bật SmartRec cho store"}
+              {isSubmitting ? "Processing..." : "🚀 Enable SmartRec for your store"}
             </s-button>
           </s-stack>
         </s-stack>

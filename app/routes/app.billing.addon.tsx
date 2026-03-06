@@ -183,7 +183,7 @@ export default function AddonPurchase() {
             <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
               <li>Shops needing consistent branding</li>
               <li>Theme-based appearance customization</li>
-              <li>A/B testing colors A/B testing màu & text text</li>
+              <li>A/B testing colors & text</li>
             </ul>
           </div>
 
@@ -487,25 +487,25 @@ export default function AddonPurchase() {
         <div style={{ fontSize: "14px", lineHeight: "1.8" }}>
           <p><strong>Q: Can FREE plan purchase add-ons?</strong></p>
           <p style={{ color: "#6d7175", marginBottom: "16px" }}>
-            A: Có! Add-ons không yêu cầu gói GROWTH. Tuy nhiên, giới hạn 500 lượt vẫn áp dụng.
+            A: Yes! Add-ons don't require the GROWTH plan. However, the 500 interaction limit still applies.
           </p>
 
-          <p><strong>Q: Mua add-ons với FREE có unlimited interactions không?</strong></p>
+          <p><strong>Q: Do add-ons give FREE plan unlimited interactions?</strong></p>
           <p style={{ color: "#6d7175", marginBottom: "16px" }}>
-            A: No, add-ons chỉ mở rộng tính năng. Muốn unlimited cần nâng cấp GROWTH.
+            A: No, add-ons only extend features. Upgrade to GROWTH for unlimited interactions.
           </p>
 
-          <p><strong>Q: Gói PRO bundle là gì?</strong></p>
+          <p><strong>Q: What is the PRO bundle?</strong></p>
           <p style={{ color: "#6d7175", marginBottom: "16px" }}>
             A: PRO = GROWTH + both add-ons for $20/month (save $3 vs buying separately).
           </p>
 
-          <p><strong>Q: Có thể mua 1 add-on rồi mua thêm sau không?</strong></p>
+          <p><strong>Q: Can I buy one add-on now and another later?</strong></p>
           <p style={{ color: "#6d7175", marginBottom: "16px" }}>
             A: Yes, add-ons are independent. Purchase anytime.
           </p>
 
-          <p><strong>Q: Bundle PRO khi nào có?</strong></p>
+          <p><strong>Q: When will the PRO bundle be available?</strong></p>
           <p style={{ color: "#6d7175" }}>
             A: Bundle purchase flow coming soon. Buy GROWTH + both add-ons separately = $23/mo. Bundle $20 will be available later.
           </p>

@@ -1,12 +1,16 @@
 /**
- * SmartRec Signal Collector — Full Implementation
- * Tracks 8 behavioral signals on storefront and calls Intent Engine.
- * Vanilla JS IIFE, no imports, < 10KB uncompressed.
+ * SmartRec Signal Collector
+ * Tracks behavioral signals on storefront, computes intent score,
+ * calls Intent Engine, and triggers widget rendering.
  *
- * Config via window.SmartRecMeta (injected by Liquid embed block):
- *   appProxy, pageType, productId, enableTracking
- *
- * Integration: calls window.SmartRec._onAction(action) after intent evaluation.
+ * Signals tracked:
+ *  - Page views (product pages)
+ *  - Time on page / session duration
+ *  - Back navigation count
+ *  - Compare pattern (2+ products of same type)
+ *  - Cart hesitation (time on cart page)
+ *  - Cart items
+ *  - Scroll depth
  */
 (function SmartRecSignals() {
   'use strict';
@@ -14,358 +18,329 @@
   var META = window.SmartRecMeta;
   if (!META || !META.enableTracking) return;
   if (/\/checkout/i.test(window.location.pathname)) return;
-  if (!META.appProxy) return;
 
-  var PROXY = META.appProxy;
   var SESSION_KEY = 'sr_session';
-  var SESSION_TTL = 24 * 60 * 60 * 1000; // 24h
+  var EVALUATE_DELAY = 4000;
+  var CART_HESITATION_INTERVAL = 5000;
 
-  // ── Session Management ─────────────────────────────────────────
+  // ── Session Management ──────────────────────────────────────
 
   function loadSession() {
     try {
-      var raw = localStorage.getItem(SESSION_KEY);
-      if (!raw) return null;
-      var s = JSON.parse(raw);
-      if (!s.createdAt || (Date.now() - s.createdAt) > SESSION_TTL) return null;
-      return s;
+      return JSON.parse(sessionStorage.getItem(SESSION_KEY) || '{}');
     } catch (e) {
-      return null;
+      return {};
     }
   }
 
-  function saveSession(session) {
+  function saveSession(s) {
     try {
-      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(s));
     } catch (e) { /* silent */ }
   }
 
-  function generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  var session = loadSession();
+
+  if (!session.startedAt) {
+    session.startedAt = Date.now();
   }
+  session.pageViews = session.pageViews || [];
+  session.viewedTypes = session.viewedTypes || [];
+  session.backNavCount = session.backNavCount || 0;
+  session.cartItems = session.cartItems || [];
+  session.cartHesitation = session.cartHesitation || 0;
+  session.comparePattern = session.comparePattern || false;
+  session.maxScroll = session.maxScroll || 0;
+  session.pageEntryTime = Date.now();
+  session.evaluated = session.evaluated || false;
 
-  var session = loadSession() || {
-    id: generateId(),
-    createdAt: Date.now(),
-    pageViews: [],
-    backNavCount: 0,
-    cartItems: [],
-    returningVisitor: false
-  };
+  // ── Track Product Page Views ────────────────────────────────
 
-  // Mark returning visitor if session existed before
-  if (loadSession()) {
-    session.returningVisitor = true;
-  }
-
-  // Track current product page
   if (META.pageType === 'product' && META.productId) {
     session.currentProduct = META.productId;
+
     if (session.pageViews.indexOf(META.productId) === -1) {
       session.pageViews.push(META.productId);
     }
-    // Limit stored page views
-    if (session.pageViews.length > 20) {
-      session.pageViews = session.pageViews.slice(-20);
+
+    if (META.productType) {
+      session.viewedTypes.push(META.productType);
+
+      var typeCount = {};
+      for (var i = 0; i < session.viewedTypes.length; i++) {
+        var t = session.viewedTypes[i];
+        typeCount[t] = (typeCount[t] || 0) + 1;
+        if (typeCount[t] >= 2) {
+          session.comparePattern = true;
+          break;
+        }
+      }
     }
   }
 
-  // Track cart items from page meta
-  if (META.cartItems && Array.isArray(META.cartItems)) {
-    session.cartItems = META.cartItems;
+  // ── Track Cart Page ─────────────────────────────────────────
+
+  if (META.pageType === 'cart' || /\/cart/i.test(window.location.pathname)) {
+    session.onCartPage = true;
+
+    if (META.cartItemCount > 0 && META.productId) {
+      if (session.cartItems.indexOf(META.productId) === -1) {
+        session.cartItems.push(META.productId);
+      }
+    }
+
+    fetchCartItems();
   }
+
+  function fetchCartItems() {
+    var root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
+    fetch(root + 'cart.js', { headers: { 'Accept': 'application/json' } })
+    .then(function(r) { return r.json(); })
+    .then(function(cart) {
+      if (cart && cart.items) {
+        session.cartItems = [];
+        for (var i = 0; i < cart.items.length; i++) {
+          var pid = cart.items[i].product_id;
+          if (session.cartItems.indexOf(pid) === -1) {
+            session.cartItems.push(pid);
+          }
+        }
+        saveSession(session);
+      }
+    })
+    .catch(function() {});
+  }
+
+  // ── Track Back Navigation ───────────────────────────────────
+
+  if (window.performance && window.performance.navigation) {
+    if (window.performance.navigation.type === 2) {
+      session.backNavCount = (session.backNavCount || 0) + 1;
+    }
+  }
+  if (window.performance && window.performance.getEntriesByType) {
+    var navEntries = window.performance.getEntriesByType('navigation');
+    if (navEntries.length > 0 && navEntries[0].type === 'back_forward') {
+      session.backNavCount = (session.backNavCount || 0) + 1;
+    }
+  }
+
+  // ── Track Scroll Depth ──────────────────────────────────────
+
+  var scrollTimer = null;
+  window.addEventListener('scroll', function() {
+    if (scrollTimer) return;
+    scrollTimer = setTimeout(function() {
+      scrollTimer = null;
+      var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+      var docHeight = Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight
+      );
+      var winHeight = window.innerHeight;
+      var pct = docHeight > winHeight ? Math.round((scrollTop / (docHeight - winHeight)) * 100) : 100;
+      if (pct > session.maxScroll) {
+        session.maxScroll = pct;
+      }
+    }, 200);
+  }, { passive: true });
+
+  // ── Cart Hesitation Timer ───────────────────────────────────
+
+  if (session.onCartPage) {
+    setInterval(function() {
+      session.cartHesitation = (session.cartHesitation || 0) + Math.round(CART_HESITATION_INTERVAL / 1000);
+      saveSession(session);
+
+      if (session.cartHesitation > 60 && !session.cartHesitationTriggered) {
+        session.cartHesitationTriggered = true;
+        evaluateAndAct();
+      }
+    }, CART_HESITATION_INTERVAL);
+  }
+
+  // ── Intent Score Computation (client-side estimate) ─────────
+
+  function computeScore() {
+    var score = 0;
+
+    var duration = Math.round((Date.now() - session.startedAt) / 1000);
+
+    var pageCount = session.pageViews.length;
+    if (pageCount >= 1) score += 10;
+    if (pageCount >= 2) score += 10;
+    if (pageCount >= 3) score += 5;
+    if (pageCount >= 5) score += 5;
+
+    if (duration > 30) score += 5;
+    if (duration > 60) score += 5;
+    if (duration > 180) score += 5;
+
+    if (session.maxScroll > 50) score += 5;
+    if (session.maxScroll > 80) score += 5;
+
+    if (session.comparePattern) score += 10;
+
+    if (session.backNavCount >= 2) score += 10;
+    if (session.backNavCount >= 4) score += 5;
+
+    var timeOnPage = Math.round((Date.now() - session.pageEntryTime) / 1000);
+    if (META.pageType === 'product' && timeOnPage > 15) score += 10;
+    if (META.pageType === 'product' && timeOnPage > 30) score += 5;
+
+    if (session.cartItems.length > 0) score += 15;
+
+    if (session.onCartPage && session.cartHesitation > 60) score += 10;
+
+    return Math.min(score, 100);
+  }
+
+  // ── Evaluate & Call Intent Engine ───────────────────────────
+
+  function evaluateAndAct() {
+    if (session.evaluated && !session.onCartPage) return;
+    session.evaluated = true;
+    saveSession(session);
+
+    var score = computeScore();
+    if (score < 30) return;
+
+    var proxyBase = META.appProxy;
+    if (!proxyBase) return;
+
+    var payload = {
+      session: {
+        currentProduct: session.currentProduct || null,
+        pageViews: session.pageViews.slice(-10),
+        backNavCount: session.backNavCount,
+        cartItems: session.cartItems,
+        cartHesitation: session.cartHesitation || 0,
+        comparePattern: session.comparePattern,
+        sessionDuration: Math.round((Date.now() - session.startedAt) / 1000)
+      },
+      score: score,
+      pageType: META.pageType || detectPageType()
+    };
+
+    fetch(proxyBase + '/intent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    .then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    })
+    .then(function(action) {
+      if (action && action.type !== 'none' && window.SmartRecRender) {
+        window.SmartRecRender(action);
+      }
+    })
+    .catch(function(err) {
+      console.warn('[SmartRec] Intent engine error:', err.message);
+    });
+  }
+
+  function detectPageType() {
+    var path = window.location.pathname;
+    if (/\/products\//.test(path)) return 'product';
+    if (/\/cart/.test(path)) return 'cart';
+    if (/\/collections\//.test(path)) return 'collection';
+    return 'other';
+  }
+
+  // ── Fetch Config & Apply Custom Styles ──────────────────────
+
+  function fetchConfigAndApplyStyles() {
+    var proxyBase = META.appProxy;
+    if (!proxyBase) return;
+
+    fetch(proxyBase + '/config')
+    .then(function(r) { return r.json(); })
+    .then(function(config) {
+      if (config && config.styles) {
+        window.SmartRecStyles = config.styles;
+        if (window.SmartRecApplyStyles) {
+          window.SmartRecApplyStyles(config.styles);
+        } else {
+          applyStylesFallback(config.styles);
+        }
+      }
+    })
+    .catch(function() {});
+  }
+
+  function applyStylesFallback(s) {
+    if (!s) return;
+    var css = [];
+    if (s.bgColor) {
+      css.push('.sr-ph-popup{background:' + s.bgColor + ' !important;}');
+      css.push('.sr-ph-trigger{background:' + s.bgColor + ' !important;}');
+    }
+    if (s.textColor) {
+      css.push('.sr-ph-popup-title{color:' + s.textColor + ' !important;}');
+      css.push('.sr-ph-popup-sub{color:' + s.textColor + ' !important;}');
+      css.push('.sr-ph-name{color:' + s.textColor + ' !important;}');
+      css.push('.sr-ph-price{color:' + s.textColor + ' !important;}');
+      css.push('.sr-ph-info{color:' + s.textColor + ' !important;}');
+      css.push('.sr-ph-trigger{color:' + s.textColor + ' !important;}');
+      css.push('.sr-ph-trigger-label{color:' + s.textColor + ' !important;}');
+      css.push('.sr-ph-trigger-hint{color:' + s.textColor + ' !important;}');
+      css.push('.sr-ph-close{color:' + s.textColor + ' !important;}');
+    }
+    if (s.borderRadius != null) {
+      var r = s.borderRadius + 'px';
+      css.push('.sr-ph-popup{border-radius:' + r + ' !important;}');
+      css.push('.sr-ph-trigger{border-radius:' + r + ' !important;}');
+      css.push('.sr-ph-atc{border-radius:' + r + ' !important;}');
+      css.push('.sr-ph-view{border-radius:' + r + ' !important;}');
+    }
+    if (s.accentColor) {
+      var btn = s.buttonStyle || 'filled';
+      if (btn === 'filled') {
+        css.push('.sr-ph-atc{background:' + s.accentColor + ' !important;color:#fff !important;border-color:' + s.accentColor + ' !important;}');
+      } else if (btn === 'outline') {
+        css.push('.sr-ph-atc{background:transparent !important;color:' + s.accentColor + ' !important;border:1px solid ' + s.accentColor + ' !important;}');
+      } else if (btn === 'text') {
+        css.push('.sr-ph-atc{background:transparent !important;color:' + s.accentColor + ' !important;border:none !important;text-decoration:underline !important;}');
+      }
+      css.push('.sr-ph-view{border-color:' + s.accentColor + ' !important;color:' + s.accentColor + ' !important;}');
+    }
+    if (s.customCSS) css.push(s.customCSS);
+    if (css.length > 0) {
+      var existing = document.getElementById('sr-liquid-override');
+      if (existing) existing.remove();
+      var tag = document.createElement('style');
+      tag.id = 'sr-liquid-override';
+      tag.textContent = css.join('');
+      document.body.appendChild(tag);
+    }
+    if (s.widgetTitle) {
+      var subs = document.querySelectorAll('.sr-ph-popup-sub');
+      for (var i = 0; i < subs.length; i++) subs[i].textContent = s.widgetTitle;
+    }
+  }
+
+  // ── Save & Schedule Evaluation ──────────────────────────────
 
   saveSession(session);
 
-  // ── Signal State ───────────────────────────────────────────────
+  fetchConfigAndApplyStyles();
 
-  var signals = {
-    timeOnProduct: 0,         // seconds
-    scrollDepth: 0,           // 0–100%
-    reviewHover: false,
-    sizeChartOpen: false,
-    imageGallerySwipes: 0,
-    backNavigation: false,
-    cartHesitation: 0,        // seconds on cart page
-    comparePattern: session.pageViews.length >= 2,
-    returningVisitor: !!session.returningVisitor,
-    trafficSourceKeyword: /[?&](q|query|search|keyword)=/i.test(window.location.search)
-  };
-
-  // Check referrer for search engine traffic
-  if (document.referrer && /google|bing|yahoo|duckduckgo/i.test(document.referrer)) {
-    signals.trafficSourceKeyword = true;
-  }
-
-  var hasSignificantChange = false;
-  var debounceTimer = null;
-  var evalScheduled = false;
-
-  // ── Signal: Time on Product ────────────────────────────────────
+  setTimeout(function() {
+    evaluateAndAct();
+  }, EVALUATE_DELAY);
 
   if (META.pageType === 'product') {
-    var timeInterval = setInterval(function() {
-      signals.timeOnProduct += 10;
-      // Mark significant change at key thresholds
-      if (signals.timeOnProduct === 60 || signals.timeOnProduct === 120) {
-        hasSignificantChange = true;
-        scheduleEval();
-      }
-    }, 10000);
-
-    // Cleanup on page unload
-    window.addEventListener('pagehide', function() { clearInterval(timeInterval); });
+    setTimeout(function() {
+      session.evaluated = false;
+      evaluateAndAct();
+    }, 15000);
   }
 
-  // ── Signal: Cart Hesitation ────────────────────────────────────
-
-  if (META.pageType === 'cart') {
-    var cartInterval = setInterval(function() {
-      signals.cartHesitation += 10;
-      if (signals.cartHesitation === 60) {
-        hasSignificantChange = true;
-        scheduleEval();
-      }
-    }, 10000);
-
-    window.addEventListener('pagehide', function() { clearInterval(cartInterval); });
-  }
-
-  // ── Signal: Scroll Depth ───────────────────────────────────────
-
-  var scrollListener = function() {
-    var scrolled = window.scrollY + window.innerHeight;
-    var total = Math.max(document.documentElement.scrollHeight, 1);
-    var depth = Math.round((scrolled / total) * 100);
-    if (depth > signals.scrollDepth) {
-      signals.scrollDepth = Math.min(depth, 100);
-      if (signals.scrollDepth >= 70 && signals.scrollDepth - 10 < 70) {
-        hasSignificantChange = true;
-        scheduleEval();
-      }
-    }
-  };
-
-  window.addEventListener('scroll', scrollListener, { passive: true });
-
-  // ── Signal: Review Hover ───────────────────────────────────────
-
-  var reviewSelectors = [
-    '.product-reviews', '[data-reviews]', '#shopify-product-reviews',
-    '.spr-reviews', '.reviews', '.product__reviews', '.judge-widget',
-    '.stamped-reviews', '[data-yotpo-main-widget]', '.jdgm-widget'
-  ];
-
-  var reviewHoverListener = function() {
-    if (!signals.reviewHover) {
-      signals.reviewHover = true;
-      hasSignificantChange = true;
-      scheduleEval();
-    }
-  };
-
-  for (var rs = 0; rs < reviewSelectors.length; rs++) {
-    var reviewEl = document.querySelector(reviewSelectors[rs]);
-    if (reviewEl) {
-      reviewEl.addEventListener('mouseenter', reviewHoverListener, { once: true });
-      reviewEl.addEventListener('touchstart', reviewHoverListener, { once: true, passive: true });
-      break;
-    }
-  }
-
-  // ── Signal: Size Chart Open ────────────────────────────────────
-
-  var sizeChartSelectors = [
-    '[data-size-chart]', '.size-chart', '#size-chart',
-    'button[aria-label*="size"]', 'a[href*="size-guide"]',
-    '.size-guide', '.size-guide-trigger'
-  ];
-
-  var sizeChartListener = function() {
-    if (!signals.sizeChartOpen) {
-      signals.sizeChartOpen = true;
-      hasSignificantChange = true;
-      scheduleEval();
-    }
-  };
-
-  for (var sc = 0; sc < sizeChartSelectors.length; sc++) {
-    var sizeEl = document.querySelector(sizeChartSelectors[sc]);
-    if (sizeEl) {
-      sizeEl.addEventListener('click', sizeChartListener, { once: true });
-      break;
-    }
-  }
-
-  // ── Signal: Image Gallery Swipe ────────────────────────────────
-
-  var galleryTouchStartX = 0;
-
-  var gallerySelectors = [
-    '.product__media-gallery', '.product-gallery',
-    '.product__photos', '[data-product-gallery]',
-    '.product-single__photos', '.product__media-list'
-  ];
-
-  for (var gi = 0; gi < gallerySelectors.length; gi++) {
-    var galleryEl = document.querySelector(gallerySelectors[gi]);
-    if (galleryEl) {
-      galleryEl.addEventListener('touchstart', function(e) {
-        galleryTouchStartX = e.touches[0].clientX;
-      }, { passive: true });
-
-      galleryEl.addEventListener('touchend', function(e) {
-        var dx = Math.abs(e.changedTouches[0].clientX - galleryTouchStartX);
-        if (dx > 40) {
-          signals.imageGallerySwipes++;
-          if (signals.imageGallerySwipes === 3) {
-            hasSignificantChange = true;
-            scheduleEval();
-          }
-        }
-      }, { passive: true });
-      break;
-    }
-  }
-
-  // ── Signal: Back Navigation Pattern ───────────────────────────
-
-  // Detect rapid forward/back navigation via performance.navigation or popstate
-  window.addEventListener('popstate', function() {
-    signals.backNavigation = true;
-    session.backNavCount = (session.backNavCount || 0) + 1;
-    saveSession(session);
-    hasSignificantChange = true;
-    scheduleEval();
-  });
-
-  // ── Intent Score Calculation (client-side) ─────────────────────
-
-  function calculateScore() {
-    var score = 0;
-
-    if (signals.timeOnProduct > 120) score += 40;
-    else if (signals.timeOnProduct > 60) score += 25;
-
-    if (signals.scrollDepth > 70) score += 15;
-    if (signals.reviewHover) score += 20;
-    if (signals.sizeChartOpen) score += 25;
-    if (signals.imageGallerySwipes >= 3) score += 10;
-
-    // Back navigation reduces score (comparison behaviour but indecisive)
-    if (signals.backNavigation) score -= 30;
-
-    if (signals.comparePattern) score += 20;
-    if (signals.returningVisitor) score += 10;
-    if (signals.trafficSourceKeyword) score += 15;
-
-    return Math.max(0, Math.min(100, score));
-  }
-
-  // ── Beacon: fire-and-forget signal logging ─────────────────────
-
-  function sendBeacon(data) {
-    try {
-      var payload = JSON.stringify(data);
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(PROXY + '/track', new Blob([payload], { type: 'application/json' }));
-      }
-    } catch (e) { /* silent */ }
-  }
-
-  // ── Intent Fetch with 3s timeout ──────────────────────────────
-
-  function fetchIntent(score) {
-    var controller = null;
-    var timeoutId = null;
-
-    try {
-      if (typeof AbortController !== 'undefined') {
-        controller = new AbortController();
-        timeoutId = setTimeout(function() { controller.abort(); }, 3000);
-      }
-
-      var payload = {
-        sessionId: session.id,
-        shop: META.shop || '',
-        score: score,
-        pageType: META.pageType || '',
-        signals: signals,
-        viewedProducts: session.pageViews || [],
-        currentProduct: META.productId
-          ? { id: META.productId, type: META.productType || '', tags: META.productTags || [], title: META.productTitle || '', price: META.productPrice || '', image: META.productImage || '' }
-          : null,
-        cartProductIds: session.cartItems || [],
-        backNavCount: session.backNavCount || 0
-      };
-
-      fetch(PROXY + '/intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: controller ? controller.signal : undefined
-      })
-        .then(function(res) {
-          if (timeoutId) clearTimeout(timeoutId);
-          return res.ok ? res.json() : null;
-        })
-        .then(function(action) {
-          if (!action) return;
-          // Invoke widget renderer via hook
-          if (window.SmartRec && typeof window.SmartRec._onAction === 'function') {
-            window.SmartRec._onAction(action);
-          } else if (typeof window.SmartRecRender === 'function') {
-            // Fallback for legacy renderer
-            window.SmartRecRender(action);
-          }
-        })
-        .catch(function() {
-          if (timeoutId) clearTimeout(timeoutId);
-        });
-    } catch (e) { /* silent */ }
-  }
-
-  // ── Evaluation orchestrator ────────────────────────────────────
-
-  function evaluate() {
-    evalScheduled = false;
-    hasSignificantChange = false;
-
-    var score = calculateScore();
-
-    // Log signal beacon
-    sendBeacon({
-      sessionId: session.id,
-      shop: META.shop || '',
-      pageType: META.pageType || '',
-      productId: META.productId || '',
-      score: score,
-      signals: signals
-    });
-
-    // Skip fetch for extreme scores — browsing or already buying
-    if (score < 30 || score >= 90) return;
-
-    fetchIntent(score);
-  }
-
-  function scheduleEval() {
-    if (evalScheduled) return;
-    evalScheduled = true;
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(evaluate, 2000);
-  }
-
-  // ── Expose SmartRec namespace ──────────────────────────────────
-
-  window.SmartRec = window.SmartRec || {};
-  window.SmartRec._onAction = window.SmartRec._onAction || null;
-  window.SmartRec.getScore = calculateScore;
-  window.SmartRec.getSignals = function() { return signals; };
-  window.SmartRec.getSession = function() { return session; };
-
-  // ── Initial evaluation after 5s ───────────────────────────────
-
-  setTimeout(evaluate, 5000);
-
+  console.log('[SmartRec] Signal collector loaded — pageType:', META.pageType,
+    '— views:', session.pageViews.length,
+    '— backNav:', session.backNavCount,
+    '— compare:', session.comparePattern,
+    '— cartHesitation:', session.cartHesitation + 's');
 })();

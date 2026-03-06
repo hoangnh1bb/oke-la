@@ -21,33 +21,107 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     settings = await db.smartRecSettings.create({ data: { shop } });
   }
 
-  const totalEvents = await db.smartRecEvent.count({ where: { shop } });
+  const now = new Date();
+  const d7 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const d30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  const widgetBreakdown = await db.smartRecEvent.groupBy({
-    by: ["widgetType"],
-    where: { shop, widgetType: { not: null } },
+  const [
+    imp7, imp30,
+    atc7, atc30,
+    viewDetail7, viewDetail30,
+    topProducts7, topProducts30,
+    recentEvents,
+  ] = await Promise.all([
+    db.smartRecEvent.count({
+      where: { shop, eventType: "impression", createdAt: { gte: d7 } },
+    }),
+    db.smartRecEvent.count({
+      where: { shop, eventType: "impression", createdAt: { gte: d30 } },
+    }),
+    db.smartRecEvent.count({
+      where: { shop, eventType: "widget_atc", createdAt: { gte: d7 } },
+    }),
+    db.smartRecEvent.count({
+      where: { shop, eventType: "widget_atc", createdAt: { gte: d30 } },
+    }),
+    db.smartRecEvent.count({
+      where: { shop, eventType: "view_detail", createdAt: { gte: d7 } },
+    }),
+    db.smartRecEvent.count({
+      where: { shop, eventType: "view_detail", createdAt: { gte: d30 } },
+    }),
+    db.smartRecEvent.groupBy({
+      by: ["productId"],
+      where: {
+        shop,
+        eventType: "impression",
+        productId: { not: null },
+        createdAt: { gte: d7 },
+      },
+      _count: true,
+      orderBy: { _count: { productId: "desc" } },
+      take: 5,
+    }),
+    db.smartRecEvent.groupBy({
+      by: ["productId"],
+      where: {
+        shop,
+        eventType: "impression",
+        productId: { not: null },
+        createdAt: { gte: d30 },
+      },
+      _count: true,
+      orderBy: { _count: { productId: "desc" } },
+      take: 5,
+    }),
+    db.smartRecEvent.findMany({
+      where: { shop },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: { eventType: true, widgetType: true, productId: true, value: true, createdAt: true },
+    }),
+  ]);
+
+  const atcByProduct7 = await db.smartRecEvent.groupBy({
+    by: ["productId"],
+    where: { shop, eventType: "widget_atc", productId: { not: null }, createdAt: { gte: d7 } },
+    _count: true,
+  });
+  const atcByProduct30 = await db.smartRecEvent.groupBy({
+    by: ["productId"],
+    where: { shop, eventType: "widget_atc", productId: { not: null }, createdAt: { gte: d30 } },
     _count: true,
   });
 
-  const recentEvents = await db.smartRecEvent.findMany({
-    where: { shop },
-    orderBy: { createdAt: "desc" },
-    take: 10,
-    select: { eventType: true, widgetType: true, createdAt: true },
-  });
+  const atcMap7: Record<string, number> = {};
+  atcByProduct7.forEach((c) => { if (c.productId) atcMap7[c.productId] = c._count; });
+  const atcMap30: Record<string, number> = {};
+  atcByProduct30.forEach((c) => { if (c.productId) atcMap30[c.productId] = c._count; });
 
   return {
     settings,
-    stats: {
-      totalEvents,
-      byWidget: widgetBreakdown.map((w) => ({
-        type: w.widgetType || "unknown",
-        count: w._count,
+    analytics: {
+      impressions7: imp7,
+      impressions30: imp30,
+      clicks7: atc7,
+      clicks30: atc30,
+      viewDetail7: viewDetail7,
+      viewDetail30: viewDetail30,
+      topProducts7: topProducts7.map((p) => ({
+        productId: p.productId || "unknown",
+        impressions: p._count,
+        clicks: atcMap7[p.productId || ""] || 0,
+      })),
+      topProducts30: topProducts30.map((p) => ({
+        productId: p.productId || "unknown",
+        impressions: p._count,
+        clicks: atcMap30[p.productId || ""] || 0,
       })),
       recentEvents: recentEvents.map((e) => ({
         ...e,
         createdAt: e.createdAt.toISOString(),
       })),
+      hasData: imp7 > 0 || imp30 > 0 || atc7 > 0 || atc30 > 0,
     },
   };
 };
@@ -58,537 +132,83 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
+  const intent = formData.get("_intent");
+
+  if (intent === "test_track") {
+    await db.smartRecEvent.create({
+      data: {
+        shop,
+        eventType: "widget_atc",
+        widgetType: "alternative_nudge",
+        productId: "test-" + Date.now(),
+        value: 299000,
+      },
+    });
+    return { success: true, tested: true };
+  }
+
+  if (intent === "clear_events") {
+    await db.smartRecEvent.deleteMany({ where: { shop } });
+    return { success: true, cleared: true };
+  }
 
   const boolField = (key: string) => formData.get(key) === "true";
   const intField = (key: string, fallback: number) =>
     parseInt(String(formData.get(key) || fallback), 10);
+  const strField = (key: string, fallback: string) =>
+    String(formData.get(key) || fallback);
+
+  const updateData = {
+    enabled: boolField("enabled"),
+    alternativeNudge: boolField("alternativeNudge"),
+    comparisonBar: boolField("comparisonBar"),
+    tagNavigator: boolField("tagNavigator"),
+    trustNudge: boolField("trustNudge"),
+    thresholdBrowsing: intField("thresholdBrowsing", 30),
+    thresholdConsidering: intField("thresholdConsidering", 55),
+    thresholdHighIntent: intField("thresholdHighIntent", 75),
+    thresholdStrongIntent: intField("thresholdStrongIntent", 89),
+    thresholdReadyToBuy: intField("thresholdReadyToBuy", 90),
+    styleAccentColor: strField("styleAccentColor", "#000000"),
+    styleTextColor: strField("styleTextColor", "#1a1a1a"),
+    styleBgColor: strField("styleBgColor", "#ffffff"),
+    styleBorderRadius: intField("styleBorderRadius", 8),
+    styleFontSize: intField("styleFontSize", 14),
+    styleButtonStyle: strField("styleButtonStyle", "filled"),
+    stylePosition: strField("stylePosition", "default"),
+    styleCustomCSS: strField("styleCustomCSS", ""),
+    widgetTitle: strField("widgetTitle", "Not sure? Similar customers also viewed these products."),
+  };
 
   await db.smartRecSettings.upsert({
     where: { shop },
-    create: {
-      shop,
-      enabled: boolField("enabled"),
-      alternativeNudge: boolField("alternativeNudge"),
-      comparisonBar: boolField("comparisonBar"),
-      tagNavigator: boolField("tagNavigator"),
-      trustNudge: boolField("trustNudge"),
-      thresholdBrowsing: intField("thresholdBrowsing", 30),
-      thresholdConsidering: intField("thresholdConsidering", 55),
-      thresholdHighIntent: intField("thresholdHighIntent", 75),
-      thresholdStrongIntent: intField("thresholdStrongIntent", 89),
-      thresholdReadyToBuy: intField("thresholdReadyToBuy", 90),
-    },
-    update: {
-      enabled: boolField("enabled"),
-      alternativeNudge: boolField("alternativeNudge"),
-      comparisonBar: boolField("comparisonBar"),
-      tagNavigator: boolField("tagNavigator"),
-      trustNudge: boolField("trustNudge"),
-      thresholdBrowsing: intField("thresholdBrowsing", 30),
-      thresholdConsidering: intField("thresholdConsidering", 55),
-      thresholdHighIntent: intField("thresholdHighIntent", 75),
-      thresholdStrongIntent: intField("thresholdStrongIntent", 89),
-      thresholdReadyToBuy: intField("thresholdReadyToBuy", 90),
-    },
+    create: { shop, ...updateData },
+    update: updateData,
   });
 
   return { success: true };
 };
 
-// ── Styles ─────────────────────────────────────────────────────
-
-const styles = {
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-    gap: 16,
-    margin: "16px 0",
-  } as React.CSSProperties,
-  statCard: {
-    background: "#f9fafb",
-    borderRadius: 12,
-    padding: "20px 24px",
-    textAlign: "center" as const,
-  },
-  statValue: {
-    fontSize: 32,
-    fontWeight: 700,
-    margin: "4px 0",
-    color: "#1a1a1a",
-  },
-  statLabel: {
-    fontSize: 13,
-    color: "#6b7280",
-    fontWeight: 500,
-  },
-  widgetCard: {
-    border: "1px solid #e5e7eb",
-    borderRadius: 12,
-    overflow: "hidden",
-    background: "#fff",
-  },
-  widgetHeader: {
-    padding: "16px 20px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderBottom: "1px solid #f3f4f6",
-  },
-  widgetTitle: {
-    fontSize: 15,
-    fontWeight: 600,
-    margin: 0,
-  },
-  widgetDesc: {
-    fontSize: 13,
-    color: "#6b7280",
-    margin: "4px 0 0",
-  },
-  badge: (color: string) => ({
-    display: "inline-block",
-    fontSize: 11,
-    fontWeight: 600,
-    padding: "2px 8px",
-    borderRadius: 99,
-    background: color + "15",
-    color,
-  }),
-  previewContainer: {
-    padding: 20,
-    background: "#f9fafb",
-    minHeight: 140,
-    position: "relative" as const,
-  },
-  previewLabel: {
-    position: "absolute" as const,
-    top: 8,
-    right: 12,
-    fontSize: 10,
-    fontWeight: 600,
-    color: "#9ca3af",
-    textTransform: "uppercase" as const,
-    letterSpacing: 0.5,
-  },
-  // Alternative Nudge preview
-  altNudge: {
-    background: "#fff",
-    borderRadius: 8,
-    padding: 14,
-    border: "1px solid rgba(0,0,0,0.08)",
-    maxWidth: 380,
-  },
-  altNudgeTitle: {
-    fontSize: 12,
-    fontWeight: 600,
-    margin: "0 0 10px",
-    color: "#374151",
-  },
-  altItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    padding: "8px 0",
-  },
-  altImg: {
-    width: 56,
-    height: 56,
-    borderRadius: 6,
-    background: "#e5e7eb",
-    flexShrink: 0,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 20,
-  },
-  altInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
-  altName: {
-    fontSize: 13,
-    fontWeight: 500,
-    margin: 0,
-    whiteSpace: "nowrap" as const,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-  altPrice: {
-    fontSize: 13,
-    fontWeight: 600,
-    margin: "2px 0 6px",
-  },
-  altBtn: {
-    fontSize: 11,
-    fontWeight: 500,
-    padding: "4px 12px",
-    border: "1px solid #374151",
-    borderRadius: 4,
-    background: "transparent",
-    color: "#374151",
-    cursor: "default",
-  },
-  // Comparison Bar preview
-  compareBar: {
-    background: "#fff",
-    borderRadius: 8,
-    padding: "10px 14px",
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    border: "1px solid rgba(0,0,0,0.08)",
-    boxShadow: "0 -1px 4px rgba(0,0,0,0.04)",
-  },
-  compareThumb: {
-    width: 36,
-    height: 36,
-    borderRadius: 4,
-    background: "#e5e7eb",
-    flexShrink: 0,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 16,
-  },
-  compareName: {
-    fontSize: 12,
-    fontWeight: 500,
-    whiteSpace: "nowrap" as const,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    maxWidth: 100,
-  },
-  compareDiff: {
-    fontSize: 11,
-    color: "#6b7280",
-    whiteSpace: "nowrap" as const,
-  },
-  compareCta: {
-    marginLeft: "auto",
-    fontSize: 12,
-    fontWeight: 600,
-    padding: "5px 14px",
-    background: "#1a1a1a",
-    color: "#fff",
-    border: "none",
-    borderRadius: 4,
-    cursor: "default",
-    flexShrink: 0,
-  },
-  // Tag Navigator preview
-  tagPanel: {
-    background: "#fff",
-    borderRadius: 8,
-    padding: 16,
-    border: "1px solid rgba(0,0,0,0.08)",
-    width: 220,
-    boxShadow: "-2px 0 8px rgba(0,0,0,0.04)",
-  },
-  tagTitle: {
-    fontSize: 13,
-    fontWeight: 600,
-    margin: "0 0 2px",
-  },
-  tagSubtitle: {
-    fontSize: 12,
-    color: "#6b7280",
-    margin: "0 0 12px",
-  },
-  tagBtn: {
-    display: "block",
-    width: "100%",
-    padding: "8px 12px",
-    fontSize: 13,
-    fontWeight: 500,
-    border: "1px solid rgba(0,0,0,0.12)",
-    borderRadius: 4,
-    background: "transparent",
-    textAlign: "left" as const,
-    cursor: "default",
-    marginBottom: 6,
-    color: "#374151",
-  },
-  // Trust Nudge preview
-  trustContainer: {
-    background: "#fff",
-    borderRadius: 8,
-    padding: 14,
-    border: "1px solid rgba(0,0,0,0.06)",
-    maxWidth: 380,
-  },
-  trustItem: {
-    padding: "8px 0",
-    borderBottom: "1px solid rgba(0,0,0,0.04)",
-  },
-  trustName: {
-    fontSize: 12,
-    fontWeight: 600,
-    margin: "0 0 4px",
-  },
-  trustMeta: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    fontSize: 12,
-    flexWrap: "wrap" as const,
-  },
-  trustStars: {
-    color: "#f59e0b",
-    letterSpacing: 1,
-  },
-  trustReviews: {
-    color: "#6b7280",
-  },
-  trustBadge: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 4,
-    padding: "1px 8px",
-    fontSize: 11,
-    fontWeight: 500,
-    background: "rgba(16,185,129,0.1)",
-    color: "#059669",
-    borderRadius: 99,
-  },
-  // Intent flow
-  flowContainer: {
-    display: "flex",
-    gap: 4,
-    margin: "12px 0",
-    flexWrap: "wrap" as const,
-  },
-  flowStep: (active: boolean, color: string) => ({
-    flex: 1,
-    minWidth: 120,
-    padding: "12px 14px",
-    borderRadius: 8,
-    background: active ? color + "10" : "#f9fafb",
-    border: `1px solid ${active ? color + "40" : "#e5e7eb"}`,
-    textAlign: "center" as const,
-  }),
-  flowScore: {
-    fontSize: 18,
-    fontWeight: 700,
-    margin: "0 0 2px",
-  },
-  flowLabel: {
-    fontSize: 11,
-    fontWeight: 600,
-    margin: 0,
-    textTransform: "uppercase" as const,
-    letterSpacing: 0.3,
-  },
-  flowAction: {
-    fontSize: 11,
-    color: "#6b7280",
-    margin: "4px 0 0",
-  },
-  // Settings
-  settingRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-    padding: "10px 0",
-    borderBottom: "1px solid #f3f4f6",
-  },
-  settingLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: 500,
-  },
-  settingDesc: {
-    fontSize: 12,
-    color: "#6b7280",
-  },
-  thresholdInput: {
-    width: 64,
-    padding: "6px 8px",
-    borderRadius: 6,
-    border: "1px solid #d1d5db",
-    fontSize: 14,
-    textAlign: "center" as const,
-  },
-  // Section title
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 600,
-    margin: "24px 0 8px",
-    paddingBottom: 8,
-    borderBottom: "2px solid #f3f4f6",
-  },
-};
-
-// ── Widget Preview Components ──────────────────────────────────
-
-function AlternativeNudgePreview() {
-  return (
-    <div style={styles.previewContainer}>
-      <span style={styles.previewLabel}>Preview — Product Page</span>
-      <div style={styles.altNudge}>
-        <p style={styles.altNudgeTitle}>
-          Không chắc chắn? Khách hàng tương tự cũng xem những sản phẩm này.
-        </p>
-        {[
-          { name: "Classic Cotton Tee — White", price: "350.000₫", emoji: "👕" },
-          { name: "Organic Slim Fit Polo", price: "420.000₫", emoji: "👔" },
-        ].map((p, i) => (
-          <div key={i} style={{ ...styles.altItem, borderTop: i > 0 ? "1px solid rgba(0,0,0,0.06)" : "none" }}>
-            <div style={styles.altImg}>{p.emoji}</div>
-            <div style={styles.altInfo}>
-              <p style={styles.altName}>{p.name}</p>
-              <p style={styles.altPrice}>{p.price}</p>
-              <span style={styles.altBtn}>Xem ›</span>
-            </div>
-          </div>
-        ))}
-        <div style={{ position: "absolute", top: 28, right: 32, fontSize: 14, color: "#9ca3af", cursor: "default" }}>✕</div>
-      </div>
-    </div>
-  );
-}
-
-function ComparisonBarPreview() {
-  return (
-    <div style={styles.previewContainer}>
-      <span style={styles.previewLabel}>Preview — Sticky Bottom Bar</span>
-      <div style={styles.compareBar}>
-        <div style={styles.compareThumb}>👟</div>
-        <span style={styles.compareName}>Nike Air Max 90</span>
-        <span style={styles.compareDiff}>Rẻ hơn 200.000₫ · Rating +0.3★</span>
-        <button style={styles.compareCta} type="button">So sánh</button>
-        <span style={{ fontSize: 13, color: "#9ca3af", marginLeft: 8, cursor: "default" }}>✕</span>
-      </div>
-      <div style={{ marginTop: 12, background: "#fff", borderRadius: 8, padding: 16, border: "1px solid rgba(0,0,0,0.08)" }}>
-        <p style={{ fontSize: 13, fontWeight: 600, margin: "0 0 12px" }}>So sánh sản phẩm</p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, textAlign: "center" }}>
-          {[
-            { name: "Nike Air Max 90", price: "2.800.000₫", rating: "4.5★ (128)", emoji: "👟" },
-            { name: "Adidas Ultraboost", price: "3.000.000₫", rating: "4.8★ (256)", emoji: "👟" },
-          ].map((p, i) => (
-            <div key={i}>
-              <div style={{ width: 80, height: 80, borderRadius: 8, background: "#e5e7eb", margin: "0 auto 8px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>{p.emoji}</div>
-              <p style={{ fontSize: 13, fontWeight: 600, margin: "0 0 2px" }}>{p.name}</p>
-              <p style={{ fontSize: 14, fontWeight: 700, margin: "0 0 2px" }}>{p.price}</p>
-              <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>{p.rating}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TagNavigatorPreview() {
-  return (
-    <div style={{ ...styles.previewContainer, display: "flex", justifyContent: "flex-end" }}>
-      <span style={styles.previewLabel}>Preview — Slide-in Panel (Right)</span>
-      <div style={styles.tagPanel}>
-        <p style={styles.tagTitle}>Vẫn đang tìm kiếm?</p>
-        <p style={styles.tagSubtitle}>Thử lọc theo:</p>
-        {["Áo cotton", "Unisex", "Summer collection", "Under 500K"].map((tag, i) => (
-          <button key={i} style={styles.tagBtn} type="button">{tag}</button>
-        ))}
-        <div style={{ position: "absolute", top: 28, right: 32, fontSize: 14, color: "#9ca3af", cursor: "default" }}>✕</div>
-      </div>
-    </div>
-  );
-}
-
-function TrustNudgePreview() {
-  return (
-    <div style={styles.previewContainer}>
-      <span style={styles.previewLabel}>Preview — Cart Page</span>
-      <div style={styles.trustContainer}>
-        {[
-          { name: "Classic Cotton Tee — White", rating: 4.8, reviews: 234, freeReturn: true },
-          { name: "Organic Slim Fit Polo", rating: 4.5, reviews: 89, freeReturn: true },
-        ].map((item, i) => (
-          <div key={i} style={{ ...styles.trustItem, borderBottom: i < 1 ? "1px solid rgba(0,0,0,0.04)" : "none" }}>
-            <p style={styles.trustName}>{item.name}</p>
-            <div style={styles.trustMeta}>
-              <span style={styles.trustStars}>{"★".repeat(Math.round(item.rating))}{"☆".repeat(5 - Math.round(item.rating))}</span>
-              <span style={styles.trustReviews}>{item.reviews} đánh giá</span>
-              {item.freeReturn && (
-                <>
-                  <span style={{ color: "#d1d5db" }}>·</span>
-                  <span style={styles.trustBadge}>↩ Đổi trả miễn phí 30 ngày</span>
-                </>
-              )}
-            </div>
-          </div>
-        ))}
-        <div style={{ position: "absolute", top: 28, right: 32, fontSize: 14, color: "#9ca3af", cursor: "default" }}>✕</div>
-      </div>
-    </div>
-  );
-}
-
-// ── Widget Config ──────────────────────────────────────────────
-
-const WIDGETS = [
-  {
-    key: "alternativeNudge" as const,
-    title: "Alternative Nudge",
-    desc: "Gợi ý 2 sản phẩm thay thế khi shopper hesitate trên product page",
-    trigger: "Score 56-89 + size_chart_open hoặc review_hover",
-    position: "Inline dưới product description, trên nút Add to Cart",
-    color: "#6366f1",
-    preview: AlternativeNudgePreview,
-  },
-  {
-    key: "comparisonBar" as const,
-    title: "Comparison Bar",
-    desc: "So sánh 2 sản phẩm khi shopper xem qua lại giữa chúng",
-    trigger: "compare_pattern (xem ≥2 products cùng type)",
-    position: "Sticky bottom 60px + slide-up comparison panel",
-    color: "#0891b2",
-    preview: ComparisonBarPreview,
-  },
-  {
-    key: "tagNavigator" as const,
-    title: "Tag Navigator",
-    desc: "Hiện tag shortcuts khi shopper bị lost (xem rồi back nhiều lần)",
-    trigger: "back_nav ≥ 3 + cart empty + session > 3 min",
-    position: "Slide-in panel từ right edge, 260px wide",
-    color: "#d97706",
-    preview: TagNavigatorPreview,
-  },
-  {
-    key: "trustNudge" as const,
-    title: "Trust Nudge",
-    desc: "Hiện rating + đổi trả miễn phí khi shopper do dự ở cart page",
-    trigger: "cart_hesitation > 60s trên /cart page",
-    position: "Inline dưới cart items, trên nút Checkout",
-    color: "#059669",
-    preview: TrustNudgePreview,
-  },
-];
-
-const INTENT_FLOW = [
-  { score: "0-30", label: "Browsing", action: "Không hiện gì", color: "#9ca3af" },
-  { score: "31-55", label: "Considering", action: "Quiet suggestion", color: "#6366f1" },
-  { score: "56-75", label: "High Intent", action: "Alternative Nudge", color: "#0891b2" },
-  { score: "76-89", label: "Strong Intent", action: "Social proof + alt", color: "#d97706" },
-  { score: "90-100", label: "Ready to Buy", action: "KHÔNG hiện widget!", color: "#059669" },
-];
-
-const THRESHOLDS = [
-  { key: "thresholdBrowsing" as const, label: "Browsing", desc: "Mới vào — chưa engage" },
-  { key: "thresholdConsidering" as const, label: "Considering", desc: "Bắt đầu quan tâm" },
-  { key: "thresholdHighIntent" as const, label: "High Intent", desc: "Đang cân nhắc nghiêm túc" },
-  { key: "thresholdStrongIntent" as const, label: "Strong Intent", desc: "Gần mua nhưng cần tiebreaker" },
-  { key: "thresholdReadyToBuy" as const, label: "Ready to Buy", desc: "Sẵn sàng mua — dừng hiện widget" },
-];
-
-// ── Component ──────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────
 
 type WidgetKey = "alternativeNudge" | "comparisonBar" | "tagNavigator" | "trustNudge";
-type ThresholdKey = "thresholdBrowsing" | "thresholdConsidering" | "thresholdHighIntent" | "thresholdStrongIntent" | "thresholdReadyToBuy";
+type Tab = "settings" | "analytics" | "appearance";
+
+const WIDGET_INFO: { key: WidgetKey; title: string; desc: string; icon: string; color: string }[] = [
+  { key: "alternativeNudge", title: "Alternative Nudge", desc: "Suggest alternative products when shoppers hesitate on product page", icon: "💡", color: "#6366f1" },
+  { key: "comparisonBar", title: "Comparison Bar", desc: "Compare 2 products when shoppers browse back and forth", icon: "⚖️", color: "#0891b2" },
+  { key: "tagNavigator", title: "Tag Navigator", desc: "Suggest filter tags when shoppers seem lost, navigate back often", icon: "🏷️", color: "#d97706" },
+  { key: "trustNudge", title: "Trust Nudge", desc: "Show ratings + free returns badge when shoppers hesitate on cart page", icon: "🛡️", color: "#059669" },
+];
+
+// ── Dashboard Component ──────────────────────────────────────
 
 export default function SmartRecDashboard() {
-  const { settings, stats } = useLoaderData<typeof loader>();
+  const { settings, analytics } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
 
+  const [activeTab, setActiveTab] = useState<Tab>("settings");
   const [enabled, setEnabled] = useState(settings.enabled);
   const [widgets, setWidgets] = useState<Record<WidgetKey, boolean>>({
     alternativeNudge: settings.alternativeNudge,
@@ -596,18 +216,21 @@ export default function SmartRecDashboard() {
     tagNavigator: settings.tagNavigator,
     trustNudge: settings.trustNudge,
   });
-  const [thresholds, setThresholds] = useState<Record<ThresholdKey, number>>({
-    thresholdBrowsing: settings.thresholdBrowsing,
-    thresholdConsidering: settings.thresholdConsidering,
-    thresholdHighIntent: settings.thresholdHighIntent,
-    thresholdStrongIntent: settings.thresholdStrongIntent,
-    thresholdReadyToBuy: settings.thresholdReadyToBuy,
-  });
-  const [expandedWidget, setExpandedWidget] = useState<string | null>(null);
+  const [sensitivity, setSensitivity] = useState(settings.thresholdHighIntent);
+  const [analyticsPeriod, setAnalyticsPeriod] = useState<"7" | "30">("7");
 
-  const isSaving =
-    ["loading", "submitting"].includes(fetcher.state) &&
-    fetcher.formMethod === "POST";
+  const [widgetStyles, setWidgetStyles] = useState({
+    styleAccentColor: settings.styleAccentColor,
+    styleTextColor: settings.styleTextColor,
+    styleBgColor: settings.styleBgColor,
+    styleBorderRadius: settings.styleBorderRadius,
+    styleFontSize: settings.styleFontSize,
+    styleButtonStyle: settings.styleButtonStyle,
+    styleCustomCSS: settings.styleCustomCSS,
+  });
+  const [widgetTitle, setWidgetTitle] = useState(settings.widgetTitle);
+
+  const isSaving = ["loading", "submitting"].includes(fetcher.state) && fetcher.formMethod === "POST";
 
   useEffect(() => {
     if (fetcher.data?.success) {
@@ -619,11 +242,23 @@ export default function SmartRecDashboard() {
     const formData = new FormData();
     formData.set("enabled", String(enabled));
     Object.entries(widgets).forEach(([k, v]) => formData.set(k, String(v)));
-    Object.entries(thresholds).forEach(([k, v]) => formData.set(k, String(v)));
+    formData.set("thresholdBrowsing", "30");
+    formData.set("thresholdConsidering", "55");
+    formData.set("thresholdHighIntent", String(sensitivity));
+    formData.set("thresholdStrongIntent", "89");
+    formData.set("thresholdReadyToBuy", "90");
+    Object.entries(widgetStyles).forEach(([k, v]) => formData.set(k, String(v)));
+    formData.set("stylePosition", "default");
+    formData.set("widgetTitle", widgetTitle);
     fetcher.submit(formData, { method: "POST" });
-  }, [enabled, widgets, thresholds, fetcher]);
+  }, [enabled, widgets, sensitivity, widgetStyles, widgetTitle, fetcher]);
 
-  const activeCount = Object.values(widgets).filter(Boolean).length;
+  const imp = analyticsPeriod === "7" ? analytics.impressions7 : analytics.impressions30;
+  const clicks = analyticsPeriod === "7" ? analytics.clicks7 : analytics.clicks30;
+  const viewDetail = analyticsPeriod === "7" ? analytics.viewDetail7 : analytics.viewDetail30;
+  const topProducts = analyticsPeriod === "7" ? analytics.topProducts7 : analytics.topProducts30;
+  const ctr = imp > 0 ? ((clicks / imp) * 100).toFixed(1) : "0.0";
+
 
   return (
     <s-page heading="SmartRec Dashboard">
@@ -636,257 +271,482 @@ export default function SmartRecDashboard() {
         Save settings
       </s-button>
 
-      {/* ── Status Banner ──────────────────────────────── */}
+      {/* Status Banner */}
       <s-section>
         <div style={{
-          padding: "16px 20px",
-          borderRadius: 12,
+          padding: "16px 20px", borderRadius: 12,
           background: enabled ? "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)" : "#f9fafb",
           border: `1px solid ${enabled ? "#bbf7d0" : "#e5e7eb"}`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 12,
+          display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12,
         }}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 600, color: enabled ? "#166534" : "#6b7280" }}>
               {enabled ? "SmartRec is active" : "SmartRec is paused"}
             </div>
             <div style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}>
-              {activeCount}/4 widgets enabled · {stats.totalEvents} events tracked
+              {Object.values(widgets).filter(Boolean).length}/4 widgets enabled
             </div>
           </div>
-          <s-checkbox
-            checked={enabled || undefined}
-            onChange={() => setEnabled(!enabled)}
-          >
+          <s-checkbox checked={enabled || undefined} onChange={() => setEnabled(!enabled)}>
             Enable
           </s-checkbox>
         </div>
       </s-section>
 
-      {/* ── Stats Grid ─────────────────────────────────── */}
-      <s-section heading="Overview">
-        <div style={styles.grid}>
-          <div style={styles.statCard}>
-            <div style={styles.statLabel}>Total Events</div>
-            <div style={styles.statValue}>{stats.totalEvents}</div>
-          </div>
-          <div style={styles.statCard}>
-            <div style={styles.statLabel}>Active Widgets</div>
-            <div style={styles.statValue}>{activeCount}/4</div>
-          </div>
-          <div style={styles.statCard}>
-            <div style={styles.statLabel}>Widget Types</div>
-            <div style={{ ...styles.statValue, fontSize: 24 }}>
-              {stats.byWidget.length > 0
-                ? stats.byWidget.map((w) => `${w.type}: ${w.count}`).join(", ")
-                : "No data yet"}
-            </div>
-          </div>
-        </div>
-      </s-section>
-
-      {/* ── Intent Score Flow ──────────────────────────── */}
-      <s-section heading="Intent Score Flow">
-        <s-text variant="subdued">
-          SmartRec theo dõi hành vi khách hàng, tính Intent Score (0-100), và chỉ hiện widget khi tín hiệu đủ mạnh. Score 90+ = KHÔNG hiện widget (họ đã quyết định rồi).
-        </s-text>
-        <div style={styles.flowContainer}>
-          {INTENT_FLOW.map((step, i) => (
-            <div key={i} style={styles.flowStep(true, step.color)}>
-              <p style={{ ...styles.flowScore, color: step.color }}>{step.score}</p>
-              <p style={{ ...styles.flowLabel, color: step.color }}>{step.label}</p>
-              <p style={styles.flowAction}>{step.action}</p>
-            </div>
+      {/* Tab Navigation */}
+      <s-section>
+        <div style={{ display: "flex", gap: 0, borderBottom: "2px solid #e5e7eb", marginBottom: 4 }}>
+          {([
+            { id: "settings" as Tab, label: "Settings" },
+            { id: "analytics" as Tab, label: "Analytics" },
+            { id: "appearance" as Tab, label: "Appearance" },
+          ]).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: "12px 24px", fontSize: 14, fontWeight: activeTab === tab.id ? 600 : 400,
+                color: activeTab === tab.id ? "#1a1a1a" : "#6b7280",
+                background: "transparent", border: "none", cursor: "pointer",
+                borderBottom: activeTab === tab.id ? "2px solid #1a1a1a" : "2px solid transparent",
+                marginBottom: -2, transition: "all 150ms",
+              }}
+            >
+              {tab.label}
+            </button>
           ))}
         </div>
       </s-section>
 
-      {/* ── Widget Components ──────────────────────────── */}
-      <div style={styles.sectionTitle}>4 Widget Components</div>
-      <s-text variant="subdued">
-        Mỗi widget render trên storefront khi Intent Engine phát hiện tín hiệu hành vi phù hợp.
-        Click "Preview" để xem widget trông như thế nào trên store.
-      </s-text>
-
-      <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 16 }}>
-        {WIDGETS.map((w) => {
-          const Preview = w.preview;
-          const isExpanded = expandedWidget === w.key;
-          const isEnabled = widgets[w.key];
-
-          return (
-            <div key={w.key} style={styles.widgetCard}>
-              <div style={styles.widgetHeader}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <p style={styles.widgetTitle}>{w.title}</p>
-                    <span style={styles.badge(w.color)}>
-                      {isEnabled ? "ON" : "OFF"}
-                    </span>
+      {/* ═══════════════════════════════════════════════════════════
+           TAB 1 — SETTINGS
+         ═══════════════════════════════════════════════════════════ */}
+      {activeTab === "settings" && (
+        <>
+          {/* Widget Toggle Cards */}
+          <s-section heading="Widgets">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 8 }}>
+              {WIDGET_INFO.map((w) => {
+                const isOn = widgets[w.key];
+                return (
+                  <div key={w.key} style={{
+                    border: `1px solid ${isOn ? w.color + "40" : "#e5e7eb"}`,
+                    borderRadius: 12, padding: "16px 20px",
+                    background: isOn ? w.color + "08" : "#fff",
+                    transition: "all 200ms",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 20 }}>{w.icon}</span>
+                        <span style={{ fontSize: 14, fontWeight: 600 }}>{w.title}</span>
+                      </div>
+                      <s-checkbox
+                        checked={isOn || undefined}
+                        onChange={() => setWidgets((prev) => ({ ...prev, [w.key]: !prev[w.key] }))}
+                        disabled={!enabled || undefined}
+                      />
+                    </div>
+                    <p style={{ fontSize: 13, color: "#6b7280", margin: 0, lineHeight: 1.5 }}>{w.desc}</p>
                   </div>
-                  <p style={styles.widgetDesc}>{w.desc}</p>
-                  <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 12, color: "#6b7280" }}>
-                    <span><strong>Trigger:</strong> {w.trigger}</span>
-                  </div>
-                  <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>
-                    <strong>Position:</strong> {w.position}
-                  </div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <button
-                    type="button"
-                    onClick={() => setExpandedWidget(isExpanded ? null : w.key)}
-                    style={{
-                      padding: "6px 14px",
-                      fontSize: 13,
-                      fontWeight: 500,
-                      border: "1px solid #d1d5db",
-                      borderRadius: 6,
-                      background: isExpanded ? "#f3f4f6" : "#fff",
-                      cursor: "pointer",
-                      color: "#374151",
-                    }}
-                  >
-                    {isExpanded ? "Hide" : "Preview"}
-                  </button>
-                  <s-checkbox
-                    checked={isEnabled || undefined}
-                    onChange={() => setWidgets((prev) => ({ ...prev, [w.key]: !prev[w.key] }))}
-                    disabled={!enabled || undefined}
-                  />
-                </div>
-              </div>
-
-              {isExpanded && <Preview />}
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
+          </s-section>
 
-      {/* ── Threshold Settings ─────────────────────────── */}
-      <s-section heading="Intent Score Thresholds">
-        <s-text variant="subdued">
-          Điều chỉnh ngưỡng Intent Score (0-100) để quyết định khi nào hiện widget.
-        </s-text>
-        <div style={{ marginTop: 12 }}>
-          {THRESHOLDS.map((t) => (
-            <div key={t.key} style={styles.settingRow}>
-              <div style={{ flex: 1 }}>
-                <div style={styles.settingLabel}>{t.label}</div>
-                <div style={styles.settingDesc}>{t.desc}</div>
+          {/* Sensitivity Slider */}
+          <s-section heading="Activation Threshold">
+            <s-text variant="subdued">
+              Adjust SmartRec sensitivity. "Sensitive" shows widgets earlier, "Cautious" only shows when signals are very clear.
+            </s-text>
+            <div style={{
+              marginTop: 16, padding: 20, background: "#f9fafb", borderRadius: 12,
+              border: "1px solid #e5e7eb",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 500, marginBottom: 12 }}>
+                <span style={{ color: "#d97706" }}>Sensitive</span>
+                <span style={{ color: "#6b7280", fontWeight: 700 }}>
+                  Intent Score threshold: {sensitivity}
+                </span>
+                <span style={{ color: "#059669" }}>Cautious</span>
               </div>
               <input
-                type="number"
-                min="0"
-                max="100"
-                value={thresholds[t.key]}
-                onChange={(e) => {
-                  const num = parseInt(e.target.value, 10);
-                  if (!isNaN(num) && num >= 0 && num <= 100) {
-                    setThresholds((prev) => ({ ...prev, [t.key]: num }));
-                  }
-                }}
+                type="range"
+                min="45"
+                max="70"
+                value={sensitivity}
+                onChange={(e) => setSensitivity(parseInt(e.target.value, 10))}
                 disabled={!enabled}
-                style={styles.thresholdInput}
+                style={{ width: "100%", height: 6, cursor: "pointer" }}
               />
-            </div>
-          ))}
-        </div>
-      </s-section>
-
-      {/* ── Recent Activity ────────────────────────────── */}
-      {stats.recentEvents.length > 0 && (
-        <s-section heading="Recent Activity">
-          <div style={{ maxHeight: 200, overflowY: "auto" }}>
-            {stats.recentEvents.map((e, i) => (
-              <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid #f3f4f6", display: "flex", gap: 12, fontSize: 13 }}>
-                <span style={{ color: "#6b7280", minWidth: 120 }}>
-                  {new Date(e.createdAt).toLocaleString()}
-                </span>
-                <span style={{ fontWeight: 500 }}>{e.eventType}</span>
-                {e.widgetType && (
-                  <span style={{ color: "#6b7280" }}>{e.widgetType}</span>
-                )}
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#9ca3af", marginTop: 6 }}>
+                <span>45</span>
+                <span>55</span>
+                <span>65</span>
+                <span>70</span>
               </div>
-            ))}
+              <p style={{ fontSize: 12, color: "#6b7280", marginTop: 12, lineHeight: 1.6 }}>
+                {sensitivity <= 50
+                  ? "Widgets appear early in the shopping journey. Best for low-traffic stores to maximize conversion opportunities."
+                  : sensitivity <= 60
+                    ? "Balanced. Widgets appear when there are enough interest signals but not too late."
+                    : "Widgets only appear when the shopper is truly considering. Least intrusive to the shopping experience."}
+              </p>
+            </div>
+          </s-section>
+        </>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════
+           TAB 2 — ANALYTICS
+         ═══════════════════════════════════════════════════════════ */}
+      {activeTab === "analytics" && (
+        <>
+          {/* Test + Period Toggle */}
+          <s-section>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <div />
+              <div style={{
+                display: "inline-flex", borderRadius: 8, border: "1px solid #e5e7eb", overflow: "hidden",
+              }}>
+                {(["7", "30"] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setAnalyticsPeriod(p)}
+                    style={{
+                      padding: "6px 16px", fontSize: 13, fontWeight: analyticsPeriod === p ? 600 : 400,
+                      background: analyticsPeriod === p ? "#1a1a1a" : "#fff",
+                      color: analyticsPeriod === p ? "#fff" : "#6b7280",
+                      border: "none", cursor: "pointer", transition: "all 150ms",
+                    }}
+                  >
+                    {p} days
+                  </button>
+                ))}
+              </div>
+            </div>
+          </s-section>
+
+          {/* ATC Click Count — Main Metric */}
+          <s-section>
+            <div style={{
+              background: "#fdf4ff", borderRadius: 12, padding: "32px 20px", textAlign: "center",
+              border: "1px solid #f0abfc",
+            }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: "#86198f", marginBottom: 8 }}>
+                Widget Add to Cart clicks
+              </div>
+              <div style={{ fontSize: 56, fontWeight: 700, color: "#701a75" }}>
+                {clicks.toLocaleString()}
+              </div>
+              <div style={{ fontSize: 13, color: "#86198f", marginTop: 8 }}>
+                in the last {analyticsPeriod} days
+              </div>
+            </div>
+          </s-section>
+
+          {/* Secondary: View Popup + View Detail */}
+          <s-section>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{
+                background: "#f0f9ff", borderRadius: 12, padding: "20px", textAlign: "center",
+                border: "1px solid #bae6fd",
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "#0369a1", marginBottom: 4 }}>Popup views</div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: "#0c4a6e" }}>{imp.toLocaleString()}</div>
+              </div>
+              <div style={{
+                background: "#ecfdf5", borderRadius: 12, padding: "20px", textAlign: "center",
+                border: "1px solid #86efac",
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "#166534", marginBottom: 4 }}>"View details" clicks</div>
+                <div style={{ fontSize: 28, fontWeight: 700, color: "#14532d" }}>{viewDetail.toLocaleString()}</div>
+              </div>
+            </div>
+          </s-section>
+
+          {/* Recent Events (debug) */}
+          {analytics.recentEvents && analytics.recentEvents.length > 0 && (
+            <s-section heading="Recent events">
+              <div style={{ marginTop: 8 }}>
+                {analytics.recentEvents.map((e: { eventType: string; widgetType?: string | null; productId?: string | null; value?: number; createdAt: string }, i: number) => (
+                  <div key={i} style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "10px 16px", fontSize: 13,
+                    borderBottom: "1px solid #f3f4f6",
+                    background: i % 2 === 0 ? "#fff" : "#fafafa",
+                  }}>
+                    <span style={{ fontWeight: 600, color: e.eventType === "widget_atc" ? "#86198f" : "#0369a1" }}>
+                      {e.eventType}
+                    </span>
+                    <span style={{ color: "#6b7280" }}>{e.productId || "—"}</span>
+                    <span style={{ color: "#6b7280", fontSize: 12 }}>
+                      {new Date(e.createdAt).toLocaleString("vi-VN")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </s-section>
+          )}
+
+          {clicks === 0 && imp === 0 && (
+            <s-section>
+              <div style={{
+                textAlign: "center", padding: "40px 20px", color: "#6b7280", fontSize: 14,
+              }}>
+                <p style={{ margin: "0 0 12px" }}>No data yet. Try clicking "Add to cart" from the widget on the storefront.</p>
+              </div>
+            </s-section>
+          )}
+        </>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════
+           TAB 3 — APPEARANCE
+         ═══════════════════════════════════════════════════════════ */}
+      {activeTab === "appearance" && (
+        <s-section>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
+            {/* Left: Controls */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+
+              {/* Colors */}
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Colors</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {([
+                    { key: "styleAccentColor" as const, label: "Button color (View / Add to Cart)" },
+                    { key: "styleTextColor" as const, label: "Product title text color" },
+                    { key: "styleBgColor" as const, label: "Card background color" },
+                  ]).map((c) => (
+                    <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <input
+                        type="color"
+                        value={widgetStyles[c.key]}
+                        onChange={(e) => setWidgetStyles((p) => ({ ...p, [c.key]: e.target.value }))}
+                        disabled={!enabled}
+                        style={{ width: 40, height: 40, border: "1px solid #d1d5db", borderRadius: 8, padding: 2, cursor: "pointer" }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>{c.label}</div>
+                        <div style={{ fontSize: 12, color: "#9ca3af" }}>{widgetStyles[c.key]}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Border radius */}
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Border Radius</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <input
+                    type="range" min="0" max="20"
+                    value={widgetStyles.styleBorderRadius}
+                    onChange={(e) => setWidgetStyles((p) => ({ ...p, styleBorderRadius: parseInt(e.target.value, 10) }))}
+                    disabled={!enabled}
+                    style={{ flex: 1 }}
+                  />
+                  <span style={{ fontSize: 14, fontWeight: 700, minWidth: 44, textAlign: "center",
+                    padding: "4px 8px", background: "#f3f4f6", borderRadius: 6 }}>
+                    {widgetStyles.styleBorderRadius}px
+                  </span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#9ca3af", marginTop: 4 }}>
+                  <span>0px (square)</span>
+                  <span>20px (round)</span>
+                </div>
+              </div>
+
+              {/* Button style */}
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Button Style</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {([
+                    { id: "filled", label: "Filled", desc: "Solid button" },
+                    { id: "outline", label: "Outlined", desc: "Border only" },
+                    { id: "text", label: "Text only", desc: "Text + underline" },
+                  ] as const).map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setWidgetStyles((p) => ({ ...p, styleButtonStyle: s.id }))}
+                      disabled={!enabled}
+                      style={{
+                        flex: 1, padding: "12px 8px", borderRadius: 8, cursor: "pointer",
+                        textAlign: "center", transition: "all 150ms",
+                        border: widgetStyles.styleButtonStyle === s.id ? `2px solid ${widgetStyles.styleAccentColor}` : "1px solid #e5e7eb",
+                        background: widgetStyles.styleButtonStyle === s.id ? widgetStyles.styleAccentColor + "08" : "#fff",
+                      }}
+                    >
+                      <div style={{
+                        display: "inline-block", padding: "4px 16px", fontSize: 12, fontWeight: 600,
+                        borderRadius: widgetStyles.styleBorderRadius / 2, marginBottom: 6,
+                        ...(s.id === "filled" ? {
+                          background: widgetStyles.styleAccentColor, color: "#fff", border: "none",
+                        } : s.id === "outline" ? {
+                          background: "transparent", color: widgetStyles.styleAccentColor,
+                          border: `1px solid ${widgetStyles.styleAccentColor}`,
+                        } : {
+                          background: "transparent", color: widgetStyles.styleAccentColor,
+                          border: "none", textDecoration: "underline",
+                        }),
+                      }}>
+                        Button
+                      </div>
+                      <div style={{ fontSize: 11, color: "#6b7280" }}>{s.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Widget title */}
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Widget Title</div>
+                <input
+                  type="text"
+                  value={widgetTitle}
+                  onChange={(e) => { if (e.target.value.length <= 50) setWidgetTitle(e.target.value); }}
+                  disabled={!enabled}
+                  style={{
+                    width: "100%", padding: "10px 14px", fontSize: 14,
+                    borderRadius: 8, border: "1px solid #d1d5db",
+                    background: enabled ? "#fff" : "#f9fafb",
+                  }}
+                />
+                <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, textAlign: "right" }}>
+                  {widgetTitle.length}/50
+                </div>
+              </div>
+
+              {/* Custom CSS */}
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Custom CSS (advanced)</div>
+                <textarea
+                  value={widgetStyles.styleCustomCSS}
+                  onChange={(e) => setWidgetStyles((p) => ({ ...p, styleCustomCSS: e.target.value }))}
+                  disabled={!enabled}
+                  placeholder={`.sr-widget { /* custom CSS */ }`}
+                  style={{
+                    width: "100%", minHeight: 80, fontSize: 12, fontFamily: "monospace",
+                    padding: 12, borderRadius: 8, border: "1px solid #d1d5db",
+                    resize: "vertical", background: enabled ? "#fff" : "#f9fafb",
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Right: Live Preview */}
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Live Preview</div>
+              <div style={{
+                background: "#f3f4f6", borderRadius: 12, padding: 24,
+                border: "1px solid #e5e7eb", position: "sticky", top: 20,
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>
+                  Product Page Preview
+                </div>
+                {/* Recommendation Card */}
+                <div style={{
+                  background: widgetStyles.styleBgColor,
+                  color: widgetStyles.styleTextColor,
+                  borderRadius: widgetStyles.styleBorderRadius,
+                  fontSize: widgetStyles.styleFontSize,
+                  padding: 16, border: "1px solid rgba(0,0,0,0.08)",
+                  position: "relative",
+                }}>
+                  <p style={{ fontSize: widgetStyles.styleFontSize - 1, fontWeight: 600, margin: "0 0 12px", paddingRight: 28 }}>
+                    {widgetTitle || "Product Recommendations"}
+                  </p>
+                  <div style={{ position: "absolute", top: 12, right: 14, fontSize: 14, color: "#9ca3af", cursor: "default" }}>✕</div>
+
+                  {[
+                    { name: "Classic Cotton Tee — White", price: "350.000₫", emoji: "👕" },
+                    { name: "Organic Slim Fit Polo", price: "420.000₫", emoji: "👔" },
+                  ].map((p, i) => (
+                    <div key={i} style={{
+                      display: "flex", alignItems: "center", gap: 12, padding: "10px 0",
+                      borderTop: i > 0 ? "1px solid rgba(0,0,0,0.06)" : "none",
+                    }}>
+                      <div style={{
+                        width: 56, height: 56, flexShrink: 0,
+                        borderRadius: Math.min(widgetStyles.styleBorderRadius, 8),
+                        background: "#e5e7eb", display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 22,
+                      }}>{p.emoji}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 500, fontSize: widgetStyles.styleFontSize - 1, marginBottom: 2 }}>{p.name}</div>
+                        <div style={{ fontWeight: 700, fontSize: widgetStyles.styleFontSize, marginBottom: 8 }}>{p.price}</div>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button type="button" style={{
+                            padding: "6px 14px", fontSize: widgetStyles.styleFontSize - 2, fontWeight: 600,
+                            borderRadius: Math.min(widgetStyles.styleBorderRadius, 6), cursor: "default",
+                            ...(widgetStyles.styleButtonStyle === "filled" ? {
+                              background: widgetStyles.styleAccentColor, color: "#fff", border: `1px solid ${widgetStyles.styleAccentColor}`,
+                            } : widgetStyles.styleButtonStyle === "outline" ? {
+                              background: "transparent", color: widgetStyles.styleAccentColor, border: `1px solid ${widgetStyles.styleAccentColor}`,
+                            } : {
+                              background: "transparent", color: widgetStyles.styleAccentColor,
+                              border: "none", textDecoration: "underline", padding: "6px 4px",
+                            }),
+                          }}>Add to cart</button>
+                          <button type="button" style={{
+                            padding: "6px 14px", fontSize: widgetStyles.styleFontSize - 2, fontWeight: 500,
+                            borderRadius: Math.min(widgetStyles.styleBorderRadius, 6), cursor: "default",
+                            background: "transparent", color: widgetStyles.styleTextColor,
+                            border: "1px solid rgba(0,0,0,0.12)",
+                          }}>View details</button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Trust Nudge mini preview */}
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+                    Cart Page Preview
+                  </div>
+                  <div style={{
+                    background: widgetStyles.styleBgColor, color: widgetStyles.styleTextColor,
+                    borderRadius: widgetStyles.styleBorderRadius,
+                    fontSize: widgetStyles.styleFontSize - 1, padding: 12,
+                    border: "1px solid rgba(0,0,0,0.06)",
+                  }}>
+                    <div style={{ fontWeight: 600, fontSize: widgetStyles.styleFontSize - 2, marginBottom: 4 }}>Classic Cotton Tee</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: widgetStyles.styleFontSize - 2 }}>
+                      <span style={{ color: "#f59e0b" }}>★★★★★</span>
+                      <span style={{ opacity: 0.6 }}>234 reviews</span>
+                      <span style={{ opacity: 0.3 }}>·</span>
+                      <span style={{
+                        padding: "1px 8px", fontSize: widgetStyles.styleFontSize - 3,
+                        background: "rgba(16,185,129,0.1)", color: "#059669", borderRadius: 99,
+                      }}>↩ Free returns</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </s-section>
       )}
 
-      {/* ── Setup Guide (aside) ────────────────────────── */}
-      <s-section slot="aside" heading="Setup Guide">
+      {/* Setup Guide (sidebar) */}
+            <s-section slot="aside" heading="Guide">
         <s-stack direction="block" gap="base">
           <s-box padding="base" borderWidth="base" borderRadius="base">
-            <s-text fontWeight="bold">Step 1</s-text>
-            <s-text>Bật SmartRec ở status banner phía trên</s-text>
+<s-text fontWeight="bold">1. Enable SmartRec</s-text>
+              <s-text>Toggle the banner above</s-text>
           </s-box>
           <s-box padding="base" borderWidth="base" borderRadius="base">
-            <s-text fontWeight="bold">Step 2</s-text>
-            <s-text>
-              Vào Online Store → Themes → Customize → App embeds →
-              bật "SmartRec Tracker"
-            </s-text>
+<s-text fontWeight="bold">2. Install Theme Extension</s-text>
+              <s-text>Online Store → Themes → Customize → App embeds → enable "SmartRec Tracker"</s-text>
           </s-box>
           <s-box padding="base" borderWidth="base" borderRadius="base">
-            <s-text fontWeight="bold">Step 3</s-text>
-            <s-text>Save theme và mở storefront</s-text>
+            <s-text fontWeight="bold">3. Save & Test</s-text>
+            <s-text>Save theme, open storefront, check Console (F12) for logs</s-text>
           </s-box>
-          <s-box padding="base" borderWidth="base" borderRadius="base">
-            <s-text fontWeight="bold">Step 4</s-text>
-            <s-text>
-              Mở Console (F12) để xem logs. Test widget bằng:
-            </s-text>
-            <s-box padding="tight" background="subdued" borderRadius="base">
-              <code style={{ fontSize: 12 }}>SmartRecRender({"{"} type: "alternative_nudge", ... {"}"})</code>
-            </s-box>
-          </s-box>
-        </s-stack>
-      </s-section>
-
-      {/* ── Architecture (aside) ───────────────────────── */}
-      <s-section slot="aside" heading="Architecture">
-        <s-stack direction="block" gap="tight">
-          <s-text fontWeight="bold">Data Flow</s-text>
-          <s-box padding="tight" background="subdued" borderRadius="base">
-            <pre style={{ fontSize: 11, margin: 0, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-{`Shopper visits store
-  → signal-collector.js
-  → calculates Intent Score
-  → POST /apps/smartrec/intent
-  → Intent Engine fetches
-    Shopify Admin API data
-  → Returns action + real data
-  → widget-renderer.js
-  → Renders correct widget`}
-            </pre>
-          </s-box>
-
-          <s-text fontWeight="bold">Key Principles</s-text>
-          <s-unordered-list>
-            <s-list-item>Intent-first, not upsell-first</s-list-item>
-            <s-list-item>Score 90+ = no widget shown</s-list-item>
-            <s-list-item>Fade-in 300ms, no popups</s-list-item>
-            <s-list-item>Dismiss persists per session</s-list-item>
-            <s-list-item>CSS inherits theme styles</s-list-item>
-            <s-list-item>Mobile-first (375px)</s-list-item>
-            <s-list-item>No widget on /checkout</s-list-item>
-          </s-unordered-list>
-
-          <s-text fontWeight="bold">Files</s-text>
-          <s-unordered-list>
-            <s-list-item>
-              <code>smartrec-widget-renderer.js</code> — 22KB / 5.5KB gz
-            </s-list-item>
-            <s-list-item>
-              <code>smartrec-signal-collector.js</code> — 2KB
-            </s-list-item>
-            <s-list-item>
-              <code>proxy-handlers.server.ts</code> — Intent Engine
-            </s-list-item>
-          </s-unordered-list>
         </s-stack>
       </s-section>
     </s-page>

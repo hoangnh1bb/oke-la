@@ -1,130 +1,77 @@
 /**
  * App Proxy catch-all route.
- * All storefront requests arrive via Shopify App Proxy at /apps/smartrec/*
- * which maps to this route at /api/proxy/*.
- * Validates HMAC, routes to internal handlers based on sub-path.
- * Returns { type: "none" } on any error — never break the storefront.
+ * Shopify proxies /apps/smartrec/* to this route at /api/proxy/*.
+ * Uses authenticate.public.appProxy for HMAC validation + admin client.
+ * Delegates to proxy-handlers.server.ts for intent engine + data fetching.
  */
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { validateProxySignature } from "../lib/smartrec/proxy-auth.server";
-import { evaluateIntent } from "../lib/smartrec/intent-engine.server";
-import { findAlternativeProducts } from "../lib/smartrec/alternatives-finder.server";
-import type { SignalPayload, TrackPayload } from "../lib/smartrec/types";
-import prisma from "../db.server";
+import { data } from "react-router";
+import { authenticate } from "../shopify.server";
+import {
+  handleIntent,
+  handleProducts,
+  handleConfig,
+  handleTrack,
+} from "../lib/proxy-handlers.server";
 
-function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-function getSubPath(params: Record<string, string | undefined>): string {
+function getSubpath(params: Record<string, string | undefined>): string {
   return params["*"] || "";
 }
 
-// --- GET handlers (config, alternatives) ---
+function extractShop(url: URL, proxySession?: { shop: string }): string {
+  return proxySession?.shop || url.searchParams.get("shop") || "";
+}
 
-export async function loader({ request, params }: LoaderFunctionArgs) {
+export const loader = async ({ request, params }: LoaderFunctionArgs) => {
+  const proxy = await authenticate.public.appProxy(request);
   const url = new URL(request.url);
-  if (!validateProxySignature(url)) {
-    return json({ error: "Unauthorized" }, 401);
-  }
-
-  const subPath = getSubPath(params);
-  const shop = url.searchParams.get("shop") || "";
+  const subpath = getSubpath(params);
+  const shop = extractShop(url, proxy.session);
 
   try {
-    switch (subPath) {
-      case "api/config":
-        return handleGetConfig(shop);
-      case "api/alternatives":
-        return handleGetAlternatives(url, shop);
+    switch (subpath) {
+      case "products":
+        return handleProducts(url.searchParams, proxy.admin!, shop);
+      case "config":
+        return handleConfig(url.searchParams, shop);
       default:
-        return json({ error: "Not found" }, 404);
+        return data({ error: "Not found" }, { status: 404 });
     }
-  } catch {
-    return json({ type: "none" });
+  } catch (e) {
+    console.error("[SmartRec] Proxy loader error:", e);
+    return data({ type: "none" });
   }
-}
+};
 
-// --- POST handlers (intent, track) ---
-
-export async function action({ request, params }: ActionFunctionArgs) {
+export const action = async ({ request, params }: ActionFunctionArgs) => {
+  const proxy = await authenticate.public.appProxy(request);
   const url = new URL(request.url);
-  if (!validateProxySignature(url)) {
-    return json({ error: "Unauthorized" }, 401);
+  const subpath = getSubpath(params);
+  const shop = extractShop(url, proxy.session);
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return data({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const subPath = getSubPath(params);
+  console.log("[SmartRec] Proxy action:", subpath, "shop:", shop, "body:", JSON.stringify(body));
 
   try {
-    const body = await request.json();
-    switch (subPath) {
-      case "api/intent":
-        return handlePostIntent(body as SignalPayload);
-      case "api/track":
-        return handlePostTrack(body as TrackPayload);
+    switch (subpath) {
+      case "track": {
+        const result = await handleTrack(body, shop);
+        console.log("[SmartRec] Track result:", JSON.stringify(result));
+        return result;
+      }
+      case "intent":
+        return handleIntent(body, proxy.admin!, shop);
       default:
-        return json({ error: "Not found" }, 404);
+        return data({ error: "Not found" }, { status: 404 });
     }
-  } catch {
-    return json({ type: "none" });
+  } catch (e) {
+    console.error("[SmartRec] Proxy action error:", e);
+    return data({ error: "Server error", detail: String(e) }, { status: 500 });
   }
-}
-
-// --- Handler implementations ---
-
-async function handlePostIntent(body: SignalPayload) {
-  const action = await evaluateIntent(body);
-  return json(action);
-}
-
-async function handleGetConfig(shop: string) {
-  const settings = await prisma.smartRecSettings.findUnique({ where: { shop } });
-  if (!settings) return json({ enabled: true }); // Default enabled for new stores
-  return json({
-    enabled: settings.enabled,
-    ucHesitationMin: settings.ucHesitationMin,
-    ucHesitationMax: settings.ucHesitationMax,
-    ucCompareEnabled: settings.comparisonBar,
-    ucLostBackNavMin: settings.ucLostBackNavMin,
-    ucCartHesitationSec: settings.ucCartHesitationSec,
-    maxAlternatives: settings.maxAlternatives,
-  });
-}
-
-async function handleGetAlternatives(url: URL, shop: string) {
-  const productId = url.searchParams.get("productId") || "";
-  const productType = url.searchParams.get("productType") || "";
-  const productTags = (url.searchParams.get("tags") || "").split(",").filter(Boolean);
-
-  if (!productId) return json({ error: "productId required" }, 400);
-
-  const currentProduct = {
-    id: productId,
-    type: productType,
-    tags: productTags,
-    title: "",
-    price: "",
-    image: "",
-  };
-
-  const alts = await findAlternativeProducts(shop, currentProduct, [], 2);
-  return json({ products: alts });
-}
-
-async function handlePostTrack(body: TrackPayload) {
-  await prisma.smartRecEvent.create({
-    data: {
-      shop: body.shop,
-      sessionId: body.sessionId,
-      eventType: body.eventType,
-      widgetType: body.widgetType,
-      productId: body.productId || null,
-      intentScore: body.intentScore || null,
-      metadata: body.metadata ? JSON.stringify(body.metadata) : null,
-    },
-  });
-  return json({ ok: true });
-}
+};

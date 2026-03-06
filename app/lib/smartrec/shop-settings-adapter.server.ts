@@ -137,8 +137,6 @@ export function toUseCaseSettings(settings: ShopSettingsData): UseCaseSettings {
     ucCompareEnabled: settings.widgetComparisonBar,
     ucLostEnabled: settings.widgetTagNavigator,
     ucLostBackNavMin: 3,
-    ucCartEnabled: settings.widgetTrustNudge,
-    ucCartHesitationSec: 60,
     maxAlternatives: 2,
   };
 }

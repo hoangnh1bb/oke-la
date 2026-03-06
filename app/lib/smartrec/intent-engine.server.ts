@@ -18,8 +18,6 @@ const DEFAULT_SETTINGS: UseCaseSettings = {
   ucCompareEnabled: true,
   ucLostEnabled: true,
   ucLostBackNavMin: 3,
-  ucCartEnabled: true,
-  ucCartHesitationSec: 60,
   maxAlternatives: 2,
 };
 
@@ -34,8 +32,6 @@ async function loadSettings(shop: string): Promise<UseCaseSettings> {
     ucCompareEnabled: row.comparisonBar,
     ucLostEnabled: row.tagNavigator,
     ucLostBackNavMin: row.ucLostBackNavMin,
-    ucCartEnabled: row.trustNudge,
-    ucCartHesitationSec: row.ucCartHesitationSec,
     maxAlternatives: row.maxAlternatives,
   };
 }

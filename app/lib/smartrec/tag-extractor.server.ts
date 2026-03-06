@@ -5,7 +5,10 @@
  */
 import type { ViewedProduct } from "./types";
 
-export function extractCommonTags(viewedProducts: ViewedProduct[], limit: number): string[] {
+export function extractCommonTags(
+  viewedProducts: ViewedProduct[],
+  limit: number,
+): { label: string; value: string }[] {
   const tagCount = new Map<string, number>();
 
   for (const product of viewedProducts) {
@@ -20,5 +23,5 @@ export function extractCommonTags(viewedProducts: ViewedProduct[], limit: number
   return Array.from(tagCount.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
-    .map(([tag]) => tag);
+    .map(([tag]) => ({ label: tag, value: tag }));
 }

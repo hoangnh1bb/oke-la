@@ -6,7 +6,7 @@ import {
   type CachedProduct,
 } from "./product-cache.server";
 import { getShopSettings } from "./smartrec/shop-settings-adapter.server";
-import prisma from "../db.server";
+import db from "../db.server";
 
 // Type for the admin GraphQL client from authenticate.public.appProxy
 type AdminClient = {
@@ -235,8 +235,8 @@ async function fetchShopPolicies(
     const responseJson = await response.json();
     const body = (responseJson.data?.shop?.refundPolicy?.body || "").toLowerCase();
     const hasFreeReturn =
-      body.includes("miễn phí") ||
       body.includes("free") ||
+      body.includes("miễn phí") ||
       body.includes("không mất phí");
     const policies = { hasFreeReturn };
     shopPolicyCache.set(cacheKey, policies, 24 * 60 * 60 * 1000);
@@ -267,30 +267,37 @@ interface IntentRequestBody {
 }
 
 /**
- * POST /apps/smartrec/track — receive behavioral signals
- * Optionally logs to ActionLog when body has actionType field.
+ * POST /apps/smartrec/track — receive behavioral signals & store events
  */
-export async function handleTrack(body: unknown) {
-  console.log("[SmartRec] Track:", JSON.stringify(body).slice(0, 200));
+export async function handleTrack(body: unknown, shop: string) {
+  const req = body as {
+    eventType?: string;
+    widgetType?: string;
+    productId?: string;
+    sessionId?: string;
+    value?: number;
+    metadata?: string;
+  };
 
-  // Optional ActionLog write — fail silently
-  try {
-    const b = body as Record<string, unknown>;
-    if (b && typeof b.actionType === "string" && typeof b.shop === "string") {
-      await prisma.actionLog.create({
-        data: {
-          shop: b.shop,
-          actionType: b.actionType,
-          productId: typeof b.productId === "string" ? b.productId : undefined,
-          clicked: b.clicked === true,
-          convertedToCart: b.convertedToCart === true,
-          sessionId: typeof b.sessionId === "string" ? b.sessionId : "unknown",
-        },
-      });
-    }
-  } catch (e) {
-    // Silent — tracking must never break the storefront
+  console.log("[SmartRec] handleTrack called — shop:", shop, "eventType:", req.eventType, "productId:", req.productId);
+
+  if (!req.eventType) return { ok: false, error: "eventType required" };
+  if (!shop) {
+    console.error("[SmartRec] handleTrack — shop is empty!");
+    return { ok: false, error: "shop required" };
   }
+
+  await db.smartRecEvent.create({
+    data: {
+      shop,
+      eventType: req.eventType,
+      widgetType: req.widgetType || null,
+      productId: req.productId || null,
+      sessionId: req.sessionId || null,
+      value: req.value || 0,
+      metadata: req.metadata || null,
+    },
+  });
 
   return { ok: true };
 }
@@ -339,13 +346,13 @@ export async function handleIntent(
       if (!isNaN(priceA) && !isNaN(priceB) && priceA !== priceB) {
         const cheaper = priceA < priceB ? productA : productB;
         const diff = Math.abs(priceA - priceB);
-        diffPoints.push(`${cheaper.title.slice(0, 20)} rẻ hơn ${diff.toLocaleString("vi-VN")}₫`);
+        diffPoints.push(`${cheaper.title.slice(0, 20)} cheaper by ${diff.toLocaleString()}`);
       }
 
       if (productA.rating && productB.rating && productA.rating !== productB.rating) {
         const better = productA.rating > productB.rating ? productA : productB;
         const ratingDiff = Math.abs(productA.rating - productB.rating).toFixed(1);
-        diffPoints.push(`${better.title.slice(0, 20)} rating cao hơn ${ratingDiff}★`);
+        diffPoints.push(`${better.title.slice(0, 20)} rated ${ratingDiff}★ higher`);
       }
 
       return {
@@ -466,48 +473,69 @@ export async function handleProducts(
 }
 
 /**
- * GET /apps/smartrec/config — merchant widget settings
- * Reads real values from ShopSettings via adapter (falls back to defaults).
+ * GET /apps/smartrec/config — merchant widget settings + styles + concierge branding
  */
-export async function handleConfig(params: URLSearchParams) {
-  const shop = params.get("shop") || "";
+export async function handleConfig(params: URLSearchParams, shopOverride?: string) {
+  const shop = shopOverride || params.get("shop") || "";
 
-  if (!shop) {
-    return {
-      enabled: true,
-      thresholds: { browsing: 30, considering: 55, highConsideration: 75, strongIntent: 89, readyToBuy: 90 },
-      widgets: { alternative_nudge: true, comparison_bar: true, tag_navigator: true, trust_nudge: true },
-    };
-  }
+  const defaultStyles = {
+    accentColor: "#000000",
+    textColor: "#1a1a1a",
+    bgColor: "#ffffff",
+    borderRadius: 8,
+    fontSize: 14,
+    buttonStyle: "filled",
+    customCSS: "",
+    widgetTitle: "Not sure? Similar customers also viewed these products.",
+  };
+
+  const defaultResponse = {
+    enabled: true,
+    thresholds: { browsing: 30, considering: 55, highConsideration: 75, strongIntent: 89, readyToBuy: 90 },
+    widgets: { alternative_nudge: true, comparison_bar: true, tag_navigator: true, trust_nudge: true },
+    styles: defaultStyles,
+  };
+
+  if (!shop) return defaultResponse;
 
   try {
-    const settings = await getShopSettings(shop);
+    const [widgetSettings, brandingSettings] = await Promise.all([
+      db.smartRecSettings.findUnique({ where: { shop } }),
+      getShopSettings(shop),
+    ]);
+
     return {
-      enabled: settings.enabled,
+      enabled: widgetSettings?.enabled ?? true,
       thresholds: {
-        browsing: settings.thresholdBrowsing,
-        considering: settings.thresholdConsidering,
-        highConsideration: settings.thresholdHighConsideration,
-        strongIntent: settings.thresholdStrongIntent,
-        readyToBuy: 90,
+        browsing: widgetSettings?.thresholdBrowsing ?? 30,
+        considering: widgetSettings?.thresholdConsidering ?? 55,
+        highConsideration: widgetSettings?.thresholdHighIntent ?? 75,
+        strongIntent: widgetSettings?.thresholdStrongIntent ?? 89,
+        readyToBuy: widgetSettings?.thresholdReadyToBuy ?? 90,
       },
       widgets: {
-        alternative_nudge: settings.widgetAlternativeNudge,
-        comparison_bar: settings.widgetComparisonBar,
-        tag_navigator: settings.widgetTagNavigator,
-        trust_nudge: settings.widgetTrustNudge,
+        alternative_nudge: widgetSettings?.alternativeNudge ?? true,
+        comparison_bar: widgetSettings?.comparisonBar ?? true,
+        tag_navigator: widgetSettings?.tagNavigator ?? true,
+        trust_nudge: widgetSettings?.trustNudge ?? true,
+      },
+      styles: {
+        accentColor: widgetSettings?.styleAccentColor ?? defaultStyles.accentColor,
+        textColor: widgetSettings?.styleTextColor ?? defaultStyles.textColor,
+        bgColor: widgetSettings?.styleBgColor ?? defaultStyles.bgColor,
+        borderRadius: widgetSettings?.styleBorderRadius ?? defaultStyles.borderRadius,
+        fontSize: widgetSettings?.styleFontSize ?? defaultStyles.fontSize,
+        buttonStyle: widgetSettings?.styleButtonStyle ?? defaultStyles.buttonStyle,
+        customCSS: widgetSettings?.styleCustomCSS ?? defaultStyles.customCSS,
+        widgetTitle: widgetSettings?.widgetTitle ?? defaultStyles.widgetTitle,
       },
       // Concierge branding (systemPromptOverride intentionally excluded — server-side only)
-      agentName: settings.agentName,
-      agentColor: settings.agentColor,
-      proactiveMessage: settings.proactiveMessage,
+      agentName: brandingSettings.agentName,
+      agentColor: brandingSettings.agentColor,
+      proactiveMessage: brandingSettings.proactiveMessage,
     };
   } catch (e) {
     console.error("[SmartRec] handleConfig error:", e);
-    return {
-      enabled: true,
-      thresholds: { browsing: 30, considering: 55, highConsideration: 75, strongIntent: 89, readyToBuy: 90 },
-      widgets: { alternative_nudge: true, comparison_bar: true, tag_navigator: true, trust_nudge: true },
-    };
+    return defaultResponse;
   }
 }

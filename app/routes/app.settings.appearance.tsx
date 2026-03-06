@@ -20,7 +20,7 @@ export async function loader({ request }: LoaderFunctionArgs): Promise<Response>
   return Response.json({
     config: config || {
       primaryColor: "#4A90E2",
-      headlineText: "Bạn có thể thích",
+      headlineText: "You may also like",
       buttonStyle: "solid",
     },
   });
@@ -32,7 +32,7 @@ export async function action({ request }: ActionFunctionArgs): Promise<Response>
   const formData = await request.formData();
 
   const primaryColor = formData.get("primaryColor")?.toString() || "#4A90E2";
-  const headlineText = formData.get("headlineText")?.toString() || "Bạn có thể thích";
+  const headlineText = formData.get("headlineText")?.toString() || "You may also like";
   const buttonStyle = formData.get("buttonStyle")?.toString() || "solid";
 
   await db.shopConfig.upsert({
