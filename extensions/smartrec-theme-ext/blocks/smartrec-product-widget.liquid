@@ -18,7 +18,339 @@
     window.SmartRecMeta.blockAnchor = "sr-product-block";
   </script>
 
-  {%- comment -%} Widget content rendered dynamically by smartrec-widget-renderer.js after intent evaluation {%- endcomment -%}
+  <style>
+    .sr-ph { font-family: var(--font-body-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif); color: var(--color-foreground, inherit); box-sizing: border-box; line-height: 1.5; }
+    .sr-ph * { box-sizing: border-box; }
+
+    /* Trigger bar */
+    .sr-ph-trigger {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 16px; margin: 16px 0;
+      background: var(--color-background, #fff);
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: var(--buttons-radius, 4px);
+      cursor: pointer; transition: border-color 150ms, box-shadow 150ms;
+    }
+    .sr-ph-trigger:hover { border-color: rgba(0,0,0,0.2); box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .sr-ph-thumbs { display: flex; gap: 6px; }
+    .sr-ph-thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; background: #f3f4f6; }
+    .sr-ph-trigger-text { flex: 1; min-width: 0; }
+    .sr-ph-trigger-label { font-size: 13px; font-weight: 600; margin: 0 0 1px; }
+    .sr-ph-trigger-hint { font-size: 12px; margin: 0; opacity: 0.6; }
+    .sr-ph-arrow { font-size: 18px; opacity: 0.4; flex-shrink: 0; }
+
+    /* Popup overlay */
+    .sr-ph-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 99999;
+      background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center;
+      padding: 16px; opacity: 0; transition: opacity 300ms ease;
+    }
+    .sr-ph-overlay.open { display: flex; opacity: 1; }
+    .sr-ph-popup {
+      position: relative; width: 100%; max-width: 420px; max-height: 85vh; overflow-y: auto;
+      padding: 24px; border-radius: 12px;
+      background: #ffffff;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    .sr-ph-popup-title { font-size: 16px; font-weight: 600; margin: 0 0 4px; padding-right: 36px; }
+    .sr-ph-popup-sub { font-size: 13px; margin: 0 0 16px; opacity: 0.6; }
+    .sr-ph-close {
+      position: absolute; top: 12px; right: 12px; width: 32px; height: 32px;
+      border: none; background: transparent; font-size: 18px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: 50%; opacity: 0.5; transition: opacity 150ms, background 150ms;
+      color: var(--color-foreground, inherit);
+    }
+    .sr-ph-close:hover { opacity: 1; background: rgba(0,0,0,0.05); }
+
+    /* Product items */
+    .sr-ph-item { display: flex; gap: 14px; padding: 14px 0; }
+    .sr-ph-item + .sr-ph-item { border-top: 1px solid rgba(0,0,0,0.06); }
+    .sr-ph-img { width: 100px; height: 100px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: #f3f4f6; }
+    .sr-ph-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+    .sr-ph-name { font-size: 15px; font-weight: 500; margin: 0 0 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .sr-ph-price { font-size: 16px; font-weight: 700; margin: 0 0 10px; }
+    .sr-ph-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .sr-ph-atc {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 8px 16px; font-size: 13px; font-weight: 600;
+      background: var(--color-foreground, #222); color: var(--color-background, #fff);
+      border: 1px solid var(--color-foreground, #222);
+      border-radius: var(--buttons-radius, 4px);
+      cursor: pointer; transition: opacity 150ms; min-width: 120px;
+    }
+    .sr-ph-atc:hover { opacity: 0.85; }
+    .sr-ph-view {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 8px 16px; font-size: 13px; font-weight: 500;
+      border: 1px solid rgba(0,0,0,0.15); color: var(--color-foreground, inherit);
+      background: transparent; border-radius: var(--buttons-radius, 4px);
+      text-decoration: none; transition: background 150ms;
+    }
+    .sr-ph-view:hover { background: rgba(0,0,0,0.04); }
+    .sr-ph-atc-ok { background: #059669 !important; border-color: #059669 !important; color: #fff !important; }
+
+    @media (max-width: 749px) {
+      .sr-ph-popup { padding: 20px; max-width: 100%; border-radius: 12px 12px 0 0; align-self: flex-end; }
+      .sr-ph-img { width: 80px; height: 80px; }
+      .sr-ph-name { font-size: 14px; }
+      .sr-ph-actions { flex-direction: column; }
+      .sr-ph-atc, .sr-ph-view { width: 100%; justify-content: center; }
+    }
+  </style>
+
+  {%- assign recommendations = product.collections.first.products | default: collections.all.products -%}
+  {%- assign recs = "" -%}
+  {%- assign count = 0 -%}
+
+  {%- comment -%} Collect up to 2 alternative products {%- endcomment -%}
+  {%- for rec in recommendations limit: 10 -%}
+    {%- if rec.id != product.id and count < 2 -%}
+      {%- assign count = count | plus: 1 -%}
+
+      {%- comment -%} Store product data for trigger thumbnails {%- endcomment -%}
+      {%- if count == 1 -%}{%- assign rec1 = rec -%}{%- endif -%}
+      {%- if count == 2 -%}{%- assign rec2 = rec -%}{%- endif -%}
+    {%- endif -%}
+  {%- endfor -%}
+
+  {%- if count > 0 -%}
+    {%- comment -%} Trigger button {%- endcomment -%}
+    <div class="sr-ph sr-ph-trigger" onclick="var o=document.getElementById('sr-ph-overlay');o.style.display='flex';setTimeout(function(){o.classList.add('open')},10);if(typeof srTrackEvent==='function')srTrackEvent('impression','alternative_nudge',null,0)">
+      <div class="sr-ph-thumbs">
+        {%- if rec1 and rec1.featured_image -%}
+          <img class="sr-ph-thumb" src="{{ rec1.featured_image | image_url: width: 80 }}" alt="" width="40" height="40" loading="lazy">
+        {%- endif -%}
+        {%- if rec2 and rec2.featured_image -%}
+          <img class="sr-ph-thumb" src="{{ rec2.featured_image | image_url: width: 80 }}" alt="" width="40" height="40" loading="lazy">
+        {%- endif -%}
+      </div>
+      <div class="sr-ph-trigger-text">
+        <p class="sr-ph-trigger-label">Product Recommendations</p>
+        <p class="sr-ph-trigger-hint">{{ count }} similar products — tap to view</p>
+      </div>
+      <span class="sr-ph-arrow">›</span>
+    </div>
+
+    {%- comment -%} Popup overlay {%- endcomment -%}
+    <div class="sr-ph sr-ph-overlay" id="sr-ph-overlay">
+      <div class="sr-ph-popup">
+        <p class="sr-ph-popup-title">Product Recommendations</p>
+        <p class="sr-ph-popup-sub">Products you recently viewed</p>
+        <button class="sr-ph-close" onclick="srClosePopup()" aria-label="Close">✕</button>
+
+        {%- assign count2 = 0 -%}
+        {%- for rec in recommendations limit: 10 -%}
+          {%- if rec.id != product.id and count2 < 2 -%}
+            <div class="sr-ph-item">
+              {%- if rec.featured_image -%}
+                <img class="sr-ph-img" src="{{ rec.featured_image | image_url: width: 200 }}" alt="{{ rec.title | escape }}" width="100" height="100" loading="lazy">
+              {%- else -%}
+                <div class="sr-ph-img" style="display:flex;align-items:center;justify-content:center;font-size:28px;">📦</div>
+              {%- endif -%}
+              <div class="sr-ph-info">
+                <p class="sr-ph-name">{{ rec.title }}</p>
+                <p class="sr-ph-price">{{ rec.price | money }}</p>
+                <div class="sr-ph-actions">
+                  <button
+                    class="sr-ph-atc"
+                    type="button"
+                    onclick="srAddToCart({{ rec.selected_or_first_available_variant.id }}, this)"
+                  >
+                    Add to cart
+                  </button>
+                  <a class="sr-ph-view" href="{{ rec.url }}" onclick="if(typeof srTrackEvent==='function')srTrackEvent('view_detail','alternative_nudge','{{ rec.id }}',0)">View details</a>
+                </div>
+              </div>
+            </div>
+            {%- assign count2 = count2 | plus: 1 -%}
+          {%- endif -%}
+        {%- endfor -%}
+      </div>
+    </div>
+
+    <script>
+      function srClosePopup() {
+        var o = document.getElementById('sr-ph-overlay');
+        if (!o) return;
+        o.classList.remove('open');
+        setTimeout(function() { o.style.display = 'none'; }, 300);
+      }
+
+      (function() {
+        var overlay = document.getElementById('sr-ph-overlay');
+        if (!overlay) return;
+        overlay.addEventListener('click', function(e) {
+          var popup = overlay.querySelector('.sr-ph-popup');
+          if (popup && !popup.contains(e.target)) srClosePopup();
+        });
+        document.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape' && overlay.classList.contains('open')) srClosePopup();
+        });
+      })();
+
+      function srIsThemeEditor() {
+        return window.Shopify && window.Shopify.designMode;
+      }
+
+      function srTrackEvent(eventType, widgetType, productId, value) {
+        var proxy = window.SmartRecMeta && window.SmartRecMeta.appProxy;
+        if (!proxy) return;
+        fetch(proxy + '/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ eventType: eventType, widgetType: widgetType, productId: productId ? String(productId) : null, value: value || 0 })
+        }).catch(function() {});
+      }
+
+      function srGetSectionIds() {
+        var ids = [];
+        var candidates = ['cart-notification-product','cart-notification-button','cart-icon-bubble','cart-drawer','cart-notification','main-cart-items','cart-live-region-text'];
+        for (var i = 0; i < candidates.length; i++) {
+          if (document.getElementById('shopify-section-' + candidates[i])) ids.push(candidates[i]);
+        }
+        return ids;
+      }
+
+      function srAddToCart(variantId, btn) {
+        if (!variantId) { btn.textContent = 'No variant'; return; }
+
+        if (srIsThemeEditor()) {
+          btn.textContent = '✓ Added (preview)';
+          btn.classList.add('sr-ph-atc-ok');
+          setTimeout(function() {
+            btn.textContent = 'Add to cart';
+            btn.classList.remove('sr-ph-atc-ok');
+          }, 1500);
+          return;
+        }
+
+        var origText = btn.textContent;
+        btn.textContent = 'Adding...';
+        btn.disabled = true;
+
+        var sectionIds = srGetSectionIds();
+        var payload = {
+          items: [{ id: parseInt(variantId, 10), quantity: 1 }]
+        };
+        if (sectionIds.length > 0) payload.sections = sectionIds.join(',');
+
+        fetch(window.Shopify.routes.root + 'cart/add.js', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        .then(function(res) {
+          if (!res.ok) return res.json().then(function(e) { throw new Error(e.description || 'HTTP ' + res.status); });
+          return res.json();
+        })
+        .then(function(data) {
+          btn.textContent = '✓ Added';
+          btn.classList.add('sr-ph-atc-ok');
+
+          if (data.sections) srUpdateSections(data.sections);
+          srRefreshCart();
+          srClosePopup();
+
+          try {
+            var item = data.items ? data.items[0] : data;
+            var atcValue = item && item.price ? item.price : 0;
+            srTrackEvent('widget_atc', 'alternative_nudge', item.product_id, atcValue);
+          } catch(e) {}
+
+          setTimeout(function() {
+            btn.textContent = origText;
+            btn.classList.remove('sr-ph-atc-ok');
+            btn.disabled = false;
+          }, 2500);
+        })
+        .catch(function(err) {
+          console.error('[SmartRec] ATC error:', err);
+          btn.textContent = err.message || 'Error — retry';
+          btn.disabled = false;
+          setTimeout(function() { btn.textContent = origText; btn.disabled = false; }, 3000);
+        });
+      }
+
+      function srUpdateSections(sections) {
+        if (!sections) return;
+        var keys = Object.keys(sections);
+        for (var i = 0; i < keys.length; i++) {
+          var el = document.getElementById('shopify-section-' + keys[i]);
+          if (el && sections[keys[i]]) {
+            el.innerHTML = new DOMParser()
+              .parseFromString(sections[keys[i]], 'text/html')
+              .querySelector('.shopify-section')?.innerHTML || sections[keys[i]];
+          }
+        }
+      }
+
+      function srRefreshCart() {
+        fetch(window.Shopify.routes.root + 'cart.js', {
+          headers: { 'Accept': 'application/json' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(cart) {
+          var countEls = document.querySelectorAll(
+            '.cart-count-bubble span, [data-cart-count], .cart-count, .js-cart-count, #cart-icon-bubble span, .header__cart-count'
+          );
+          countEls.forEach(function(el) { el.textContent = cart.item_count; });
+
+          var bubbles = document.querySelectorAll('.cart-count-bubble');
+          bubbles.forEach(function(b) {
+            if (cart.item_count > 0) b.removeAttribute('hidden');
+          });
+
+          document.documentElement.dispatchEvent(new CustomEvent('cart:refresh', { bubbles: true, detail: { cart: cart } }));
+          document.documentElement.dispatchEvent(new CustomEvent('cart:change', { bubbles: true, detail: { cart: cart } }));
+        })
+        .catch(function() {});
+
+        var drawer = document.querySelector('cart-drawer');
+        if (drawer) {
+          if (typeof drawer.renderContents === 'function') {
+            fetch(window.Shopify.routes.root + '?sections=cart-drawer')
+            .then(function(r) { return r.json(); })
+            .then(function(s) {
+              var html = s['cart-drawer'];
+              if (html) {
+                var parsed = new DOMParser().parseFromString(html, 'text/html');
+                var newDrawerInner = parsed.querySelector('cart-drawer');
+                if (newDrawerInner) drawer.innerHTML = newDrawerInner.innerHTML;
+              }
+              if (typeof drawer.open === 'function') drawer.open();
+            }).catch(function() {});
+          } else {
+            drawer.classList.add('active', 'is-open');
+            var details = drawer.querySelector('details');
+            if (details) details.setAttribute('open', '');
+          }
+        }
+
+        var notification = document.querySelector('cart-notification');
+        if (notification) {
+          fetch(window.Shopify.routes.root + '?sections=cart-notification-product,cart-notification-button')
+          .then(function(r) { return r.json(); })
+          .then(function(s) {
+            Object.keys(s).forEach(function(id) {
+              var el = document.getElementById('shopify-section-' + id);
+              if (el && s[id]) {
+                el.innerHTML = new DOMParser()
+                  .parseFromString(s[id], 'text/html')
+                  .querySelector('.shopify-section')?.innerHTML || s[id];
+              }
+            });
+            if (typeof notification.open === 'function') { notification.open(); }
+            else { notification.classList.add('animate', 'active'); notification.removeAttribute('hidden'); }
+          }).catch(function() {});
+        }
+      }
+    </script>
+  {%- else -%}
+    <div class="sr-ph" style="padding:12px 16px;margin:16px 0;border:1px solid rgba(0,0,0,0.06);border-radius:var(--buttons-radius,4px);font-size:13px;color:#6b7280;">
+      SmartRec widget will show product recommendations when data is available.
+    </div>
+  {%- endif -%}
 
   <script src="{{ 'smartrec-signal-collector.js' | asset_url }}" defer></script>
   <script src="{{ 'smartrec-widget-renderer.js' | asset_url }}" defer></script>
@@ -34,14 +366,14 @@
       "id": "enable_alt_nudge",
       "label": "Enable Alternative Nudge",
       "default": true,
-      "info": "Gợi ý sản phẩm thay thế khi khách hàng đang phân vân"
+      "info": "Suggest alternative products when customers are hesitating"
     },
     {
       "type": "checkbox",
       "id": "enable_comparison",
       "label": "Enable Comparison Bar",
       "default": true,
-      "info": "So sánh 2 sản phẩm khi khách xem qua lại"
+      "info": "Compare 2 products when customers browse back and forth"
     }
   ]
 }

@@ -27,31 +27,31 @@ export const WIDGETS = [
     id: "alternative_nudge" as const,
     name: "Alternative Nudge",
     description:
-      "Gợi ý khi khách đang phân vân về size hoặc chất lượng sản phẩm",
+      "Suggest alternatives when shoppers hesitate about size or quality",
     icon: "🔄",
-    triggerHint: "Kích hoạt khi khách mở bảng size hoặc đọc reviews lâu",
+    triggerHint: "Triggers when shopper opens size chart or reads reviews for a while",
   },
   {
     id: "comparison_bar" as const,
     name: "Comparison Bar",
-    description: "Thanh so sánh khi khách đang xem nhiều sản phẩm cùng loại",
+    description: "Comparison bar when shoppers browse multiple similar products",
     icon: "⚖️",
-    triggerHint: "Kích hoạt khi khách xem ≥2 sản phẩm cùng danh mục",
+    triggerHint: "Triggers when shopper views ≥2 products in the same category",
   },
   {
     id: "tag_navigator" as const,
     name: "Tag Navigator",
     description:
-      "Panel gợi ý danh mục khi khách back nhiều lần mà chưa mua",
+      "Category suggestion panel when shoppers navigate back repeatedly without buying",
     icon: "🧭",
-    triggerHint: "Kích hoạt sau 3 lần back mà giỏ hàng trống",
+    triggerHint: "Triggers after 3 back navigations with an empty cart",
   },
   {
     id: "trust_nudge" as const,
     name: "Trust Nudge",
     description:
-      "Hiện đánh giá sao và chính sách đổi trả khi khách do dự ở giỏ hàng",
+      "Show star ratings and return policy when shoppers hesitate at cart",
     icon: "⭐",
-    triggerHint: "Kích hoạt khi khách ở trang cart > 60 giây",
+    triggerHint: "Triggers when shopper stays on cart page > 60 seconds",
   },
 ];

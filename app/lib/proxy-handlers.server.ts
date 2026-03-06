@@ -2,8 +2,10 @@ import { data } from "react-router";
 import {
   productCache,
   productListCache,
+  shopPolicyCache,
   type CachedProduct,
 } from "./product-cache.server";
+import db from "../db.server";
 
 // Type for the admin GraphQL client from authenticate.public.appProxy
 type AdminClient = {
@@ -77,6 +79,16 @@ const PRODUCTS_BY_TYPE_QUERY = `#graphql
         metafieldReviewCount: metafield(namespace: "reviews", key: "rating_count") {
           value
         }
+      }
+    }
+  }
+`;
+
+const SHOP_POLICY_QUERY = `#graphql
+  query ShopPolicy {
+    shop {
+      refundPolicy {
+        body
       }
     }
   }
@@ -209,6 +221,31 @@ async function fetchSimilarProducts(
   }
 }
 
+async function fetchShopPolicies(
+  admin: AdminClient,
+  shop: string,
+): Promise<{ hasFreeReturn: boolean }> {
+  const cacheKey = `${shop}:policies`;
+  const cached = shopPolicyCache.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const response = await admin.graphql(SHOP_POLICY_QUERY);
+    const responseJson = await response.json();
+    const body = (responseJson.data?.shop?.refundPolicy?.body || "").toLowerCase();
+    const hasFreeReturn =
+      body.includes("free") ||
+      body.includes("miễn phí") ||
+      body.includes("không mất phí");
+    const policies = { hasFreeReturn };
+    shopPolicyCache.set(cacheKey, policies, 24 * 60 * 60 * 1000);
+    return policies;
+  } catch (e) {
+    console.error("[SmartRec] fetchShopPolicies error:", e);
+    return { hasFreeReturn: false };
+  }
+}
+
 // ── Route Handlers ─────────────────────────────────────────────
 
 interface IntentSession {
@@ -229,10 +266,38 @@ interface IntentRequestBody {
 }
 
 /**
- * POST /apps/smartrec/track — receive behavioral signals
+ * POST /apps/smartrec/track — receive behavioral signals & store events
  */
-export async function handleTrack(body: unknown) {
-  console.log("[SmartRec] Track:", JSON.stringify(body).slice(0, 200));
+export async function handleTrack(body: unknown, shop: string) {
+  const req = body as {
+    eventType?: string;
+    widgetType?: string;
+    productId?: string;
+    sessionId?: string;
+    value?: number;
+    metadata?: string;
+  };
+
+  console.log("[SmartRec] handleTrack called — shop:", shop, "eventType:", req.eventType, "productId:", req.productId);
+
+  if (!req.eventType) return { ok: false, error: "eventType required" };
+  if (!shop) {
+    console.error("[SmartRec] handleTrack — shop is empty!");
+    return { ok: false, error: "shop required" };
+  }
+
+  await db.smartRecEvent.create({
+    data: {
+      shop,
+      eventType: req.eventType,
+      widgetType: req.widgetType || null,
+      productId: req.productId || null,
+      sessionId: req.sessionId || null,
+      value: req.value || 0,
+      metadata: req.metadata || null,
+    },
+  });
+
   return { ok: true };
 }
 
@@ -280,13 +345,13 @@ export async function handleIntent(
       if (!isNaN(priceA) && !isNaN(priceB) && priceA !== priceB) {
         const cheaper = priceA < priceB ? productA : productB;
         const diff = Math.abs(priceA - priceB);
-        diffPoints.push(`${cheaper.title.slice(0, 20)} rẻ hơn ${diff.toLocaleString("vi-VN")}₫`);
+        diffPoints.push(`${cheaper.title.slice(0, 20)} cheaper by ${diff.toLocaleString()}`);
       }
 
       if (productA.rating && productB.rating && productA.rating !== productB.rating) {
         const better = productA.rating > productB.rating ? productA : productB;
         const ratingDiff = Math.abs(productA.rating - productB.rating).toFixed(1);
-        diffPoints.push(`${better.title.slice(0, 20)} rating cao hơn ${ratingDiff}★`);
+        diffPoints.push(`${better.title.slice(0, 20)} rated ${ratingDiff}★ higher`);
       }
 
       return {
@@ -346,6 +411,34 @@ export async function handleIntent(
     }
   }
 
+  // UC-04: Trust Nudge
+  if (
+    pageType === "cart" &&
+    sess.cartHesitation &&
+    sess.cartHesitation > 60 &&
+    sess.cartItems &&
+    sess.cartItems.length > 0
+  ) {
+    const policies = await fetchShopPolicies(admin, shop);
+    const cartProducts = await Promise.all(
+      sess.cartItems.slice(0, 5).map((id) => fetchProductById(id, admin, shop)),
+    );
+
+    const items = cartProducts
+      .filter((p): p is CachedProduct => p !== null)
+      .map((p) => ({
+        product_id: p.id,
+        title: p.title,
+        rating: p.rating,
+        review_count: p.review_count,
+        has_free_return: policies.hasFreeReturn,
+      }));
+
+    if (items.length > 0) {
+      return { type: "trust_nudge", data: { items } };
+    }
+  }
+
   return { type: "none" };
 }
 
@@ -379,22 +472,56 @@ export async function handleProducts(
 }
 
 /**
- * GET /apps/smartrec/config — merchant widget settings
+ * GET /apps/smartrec/config — merchant widget settings + styles
  */
-export async function handleConfig(_params: URLSearchParams) {
+export async function handleConfig(params: URLSearchParams, shopOverride?: string) {
+  const shop = shopOverride || params.get("shop") || "";
+
+  if (shop) {
+    const settings = await db.smartRecSettings.findUnique({ where: { shop } });
+    if (settings) {
+      return {
+        enabled: settings.enabled,
+        thresholds: {
+          browsing: settings.thresholdBrowsing,
+          considering: settings.thresholdConsidering,
+          highConsideration: settings.thresholdHighIntent,
+          strongIntent: settings.thresholdStrongIntent,
+          readyToBuy: settings.thresholdReadyToBuy,
+        },
+        widgets: {
+          alternative_nudge: settings.alternativeNudge,
+          comparison_bar: settings.comparisonBar,
+          tag_navigator: settings.tagNavigator,
+          trust_nudge: settings.trustNudge,
+        },
+        styles: {
+          accentColor: settings.styleAccentColor,
+          textColor: settings.styleTextColor,
+          bgColor: settings.styleBgColor,
+          borderRadius: settings.styleBorderRadius,
+          fontSize: settings.styleFontSize,
+          buttonStyle: settings.styleButtonStyle,
+          customCSS: settings.styleCustomCSS,
+          widgetTitle: settings.widgetTitle,
+        },
+      };
+    }
+  }
+
   return {
     enabled: true,
-    thresholds: {
-      browsing: 30,
-      considering: 55,
-      highConsideration: 75,
-      strongIntent: 89,
-      readyToBuy: 90,
-    },
-    widgets: {
-      alternative_nudge: true,
-      comparison_bar: true,
-      tag_navigator: true,
+    thresholds: { browsing: 30, considering: 55, highConsideration: 75, strongIntent: 89, readyToBuy: 90 },
+    widgets: { alternative_nudge: true, comparison_bar: true, tag_navigator: true, trust_nudge: true },
+    styles: {
+      accentColor: "#000000",
+      textColor: "#1a1a1a",
+      bgColor: "#ffffff",
+      borderRadius: 8,
+      fontSize: 14,
+      buttonStyle: "filled",
+      customCSS: "",
+      widgetTitle: "Not sure? Similar customers also viewed these products.",
     },
   };
 }
