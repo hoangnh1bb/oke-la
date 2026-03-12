@@ -11,6 +11,6 @@
     "typescript": "^5.7.0"
   },
   "dependencies": {
-    "marked": "^15.0.0"
+    "marked": "^17.0.3"
   }
 }
